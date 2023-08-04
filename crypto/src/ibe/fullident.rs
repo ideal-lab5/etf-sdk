@@ -1,6 +1,7 @@
 use ark_bls12_381::{
     Bls12_381, G1Projective as G1, G2Projective as G2, 
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::pairing::Pairing;
 use ark_std::{
     ops::Mul,
@@ -9,14 +10,29 @@ use ark_std::{
 use crate::utils::{hash_to_g1, h2, h3, h4};
 
 /// a ciphertext (U, V, W)
+/// Q: can I find a best way to aggregate the ciphertexts? 
+/// that would be ideal, then we don't need a giant 
+/// vec of these
+#[derive(CanonicalDeserialize, CanonicalSerialize)]
 pub struct Ciphertext {
     pub u: G2,
     pub v: Vec<u8>,
     pub w: Vec<u8>,
 }
 
+pub trait Ibe {
+
+    fn setup(ibe_pp: G2, p_pub: G2) -> Self;
+
+    fn encrypt<R: Rng + Sized>(
+        &self, message: &[u8;32], identity: &[u8], rng: R
+    ) -> Ciphertext;
+
+    fn decrypt(&self, ciphertext: Ciphertext, sk: G1) -> Vec<u8>;
+}
+
 /// a struct to hold IBE public params
-pub struct Ibe {
+pub struct BfIbe {
     pub ibe_pp: G2,
     pub p_pub: G2,
 }
@@ -24,11 +40,11 @@ pub struct Ibe {
 /// the IBE implementation
 /// based on the BF-IBE except using bilinear map from G1 * G2 -> G2
 ///
-impl Ibe {
+impl Ibe for BfIbe {
 
     /// setup the IBE, providing public parameters
     ///could include a proof that P_pub was calculated from sP ?
-    pub fn setup(ibe_pp: G2, p_pub: G2) -> Self {
+    fn setup(ibe_pp: G2, p_pub: G2) -> Self {
         Self { ibe_pp, p_pub }
     }
 
@@ -38,7 +54,7 @@ impl Ibe {
     /// * `identity`: The identity for which the message will be encrypted
     /// * `rng`: A random number generator
     ///
-    pub fn encrypt<R: Rng + Sized>(
+    fn encrypt<R: Rng + Sized>(
         &self,
         message: &[u8;32],
         identity: &[u8],
@@ -63,14 +79,18 @@ impl Ibe {
         let w_rhs = h4(&sigma);
         let w_out = cross_product_32(message, &w_rhs);
         // (rP, sigma (+) H2(e(Q_id, P_pub)), message (+) H4(sigma))
-        Ciphertext { u: u, v: v_out.to_vec(), w: w_out.to_vec() }
+        Ciphertext {
+            u: u, 
+            v: v_out.to_vec(), 
+            w: w_out.to_vec(),
+        }
     }
 
     /// decrypts a message using the provided key
     /// * `ciphertext`: The ciphertext to decrypt
     /// * `sk`: The appropriate identity's secret key
     ///
-    pub fn decrypt(
+    fn decrypt(
         &self,
         ciphertext: Ciphertext,
         sk: G1,
@@ -108,6 +128,7 @@ mod test {
         ChaCha20Rng,
         rand_core::SeedableRng,
     };
+    use ark_bls12_381::Fr;
     use ark_std::{UniformRand, rand::RngCore};
 
     #[test]
@@ -124,7 +145,7 @@ mod test {
         let ibe_pp = G2::rand(&mut rng);
         let p_pub = ibe_pp.mul(msk);
 
-        let ibe = Ibe::setup(ibe_pp, p_pub);
+        let ibe = BfIbe::setup(ibe_pp, p_pub);
         let ct = ibe.encrypt(&message, id_string, &mut rng);
         // then calculate our own secret
         let d = hash_to_g1(id_string).mul(msk);

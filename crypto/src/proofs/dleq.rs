@@ -42,6 +42,11 @@ impl DLEQProof {
     }
 
     /// verify a DLEQ Proof with a given public parameters
+    ///
+    /// * `g`: a generator in G1
+    /// * `h`: A generator in G1
+    /// * `extras`: extra bytes used to generator the proof
+    ///
     pub fn verify(&self, g: K, h: K, extras: Vec<u8>) -> bool {
         verify_proof(g, h, self.clone(), extras)
     }
@@ -50,6 +55,10 @@ impl DLEQProof {
 /// Prepare a DLEQ proof of knowledge of the value 'x'
 /// 
 /// * `x`: The secret (scalar)
+/// * `g`: A generator point in G1
+/// * `h`:  A generator point in G1
+/// * `extras`: extra bytes to append to the hasher
+/// * `rng`: A random number generator
 ///
 fn prepare_proof<R: Rng + Sized>(
     x: Fr, g: K, h: K, 
