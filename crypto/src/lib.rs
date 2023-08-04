@@ -4,3 +4,4 @@ pub mod utils;
 pub mod encryption;
 pub mod ibe;
 pub mod proofs;
+pub mod client;

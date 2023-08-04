@@ -32,6 +32,10 @@ pub trait Ibe {
 }
 
 /// a struct to hold IBE public params
+#[derive(
+    Debug, Clone, 
+    CanonicalDeserialize, CanonicalSerialize,
+)]
 pub struct BfIbe {
     pub ibe_pp: G2,
     pub p_pub: G2,

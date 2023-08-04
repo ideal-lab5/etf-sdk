@@ -5,9 +5,9 @@ use crypto::{
     },
     encryption::aes_encrypt,
     ibe::{
-        fullident::Ibe,
-        client::IbeClient,
+        fullident::{Ibe, BfIbe},
     },
+    client::EtfClient,
 };
 
 #[derive(Debug)]
@@ -16,8 +16,13 @@ pub enum Error {
     DecryptionError,
 }
 
+pub struct IbeConfig {
+    pub pp: Vec<u8>,
+    pub ppub: Vec<u8>,
+}
+
 // these are the funcs that I want to compile to wasm
-pub trait EtfApi<D: DleqVerifier, B: Ibe, C: IbeClient<B>> {
+pub trait EtfApi<D: DleqVerifier, E: EtfClient> {
     /// verify the DLEQ proof
     fn verify(
         id: Vec<u8>, 
@@ -26,20 +31,33 @@ pub trait EtfApi<D: DleqVerifier, B: Ibe, C: IbeClient<B>> {
     ) -> bool;
 
     /// encrypt the message for the given slot ids
-    fn encrypt(message: &[u8], slot_ids: Vec<Vec<u8>>) 
-        -> Result<Vec<u8>, Error>;
+    fn encrypt(&self, message: &[u8], slot_ids: Vec<Vec<u8>>) 
+        -> Result<Vec<Vec<u8>>, Error>;
 
     // decrypt the message with the given sk
     fn decrypt(ciphertext: &[u8], sk: Vec<u8>) 
         -> Result<Vec<u8>, Error>;
 }
 
-pub struct DefaultApi;
-impl<D: DleqVerifier, B: Ibe, C: IbeClient<B>> EtfApi<D, B, C> for DefaultApi {
+///  the default implementation of the etf api
+pub struct DefaultApi {
+    ibe: BfIbe,
+}
+impl<D: DleqVerifier, E: EtfClient> EtfApi<D, E> for DefaultApi {
+
+
+    pub fn init(ibe: BfIbe) -> Self {
+        Self { ibe }
+    }
 
     /// verify a dleq proof using the IbeDleqVerifier
     /// The verifier expects a specific G1 generator and a specific hash to g1 function
     /// which the dleq proof must have used, otherwise it will fail
+    ///
+    /// * `id`:
+    /// * `proof`:
+    /// * `extras`: 
+    ///
     fn verify(
         id: Vec<u8>,
         proof: DLEQProof,
@@ -52,23 +70,32 @@ impl<D: DleqVerifier, B: Ibe, C: IbeClient<B>> EtfApi<D, B, C> for DefaultApi {
     /// with the ephemeral secret split into shares and encrypted for the future slot ids
     ///
     fn encrypt(
+        &self,
         message: &[u8], 
         slot_ids: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, Error> {
-        // (ct, nonce, key)
-        let aes_out = aes_encrypt(message);
-        // then do sss on aes_out.key
-
-        // let etf_out = C::encrypt(aes_out.key, slot_ids);
-        
-        Ok(Vec::new())
+    ) -> Result<Vec<Vec<u8>>, Error> {
+        // let aes_out = aes_encrypt(message);
+        Ok(E::encrypt(self.ibe.clone(), Vec::new()))
+        // C::encrypt(message, slot_ids)?
+        // Ok(Vec::new())
     }
 
     fn decrypt(
         ciphertext: &[u8], 
         sk: Vec<u8>,
     ) -> Result<Vec<u8>, Error> {
+        // C::decrypt(ciphertext, sk)?
         Ok(Vec::new())
     }
 
 }
+
+// #[cfg(test)]
+// pub mod tests {
+//     #[test]
+//     fn default_api_can_verify() {
+
+//         let proof = DLEQProof::new();
+//         assert_ok!(DefaultApi::verify(vec![], ));
+//     }
+// }
