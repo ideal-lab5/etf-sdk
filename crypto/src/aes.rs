@@ -21,10 +21,3 @@ pub fn encrypt(message: &[u8], pubkey: Vec<u8>) -> Vec<u8> {
 
     Vec::new();
 }
-
-/// sha256 hash the input slice
-fn sha256(b: &[u8]) -> Vec<u8> {
-    let mut hasher = sha2::Sha256::new();
-	sha2::Digest::update(&mut hasher, b);
-    hasher.finalize().to_vec()
-}

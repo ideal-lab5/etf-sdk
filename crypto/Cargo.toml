@@ -1,0 +1,21 @@
+[package]
+name = "crypto"
+version = "0.1.0"
+edition = "2021"
+description = "cryptographic primitives for etf"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+aes-gcm = "0.10.2"
+sha2 = { version = "0.10.2", default-features = false }
+sha3 = { version = "0.10.0", default-features = false }
+# arkworks dependencies
+ark-std = { version = "0.4.0", default-features = false }
+ark-ff = { version = "0.4.0", default-features = false }
+ark-poly = { version = "0.4.0", default-features = false }
+ark-ec = { version = "0.4.0", default-features = false }
+ark-serialize = { version = "0.4.0", default-features = false }
+ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
+ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature"] }
+rand_chacha = { version = "0.3.1", default-features = false }
