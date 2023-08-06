@@ -3,6 +3,13 @@ use aes_gcm::{
     Aes256Gcm, Nonce, // Or `Aes128Gcm`
 };
 use generic_array::ArrayLength;
+use ark_std::rand::Rng;
+use ark_bls12_381::Fr;
+use ark_ff::{PrimeField, UniformRand};
+use ark_poly::{
+    polynomial::univariate::DensePolynomial,
+    DenseUVPolynomial, Polynomial,
+};
 
 pub struct AESOutput {
     pub ciphertext: Vec<u8>,
@@ -29,6 +36,17 @@ pub fn aes_encrypt(message: &[u8]) -> Result<AESOutput, Error> {
 
 pub fn aes_decrypt() {
     todo!();
+}
+
+pub fn shamir<R: Rng + Sized>(k: [u8;32], n: u8, t: u8, mut rng: R) -> Vec<Fr> {
+    // 1. generate t random values
+    let s = Fr::from_be_bytes_mod_order(&k);
+    let mut coeffs = vec![s];
+    let mut rand_coeffs = (1..t+1).map(|_| Fr::rand(&mut rng)).collect::<Vec<_>>();
+    coeffs.append(&mut rand_coeffs);
+    let f = DensePolynomial::<Fr>::from_coefficients_vec(coeffs);
+    let shares = (1..n+1).map(|i| f.evaluate(&Fr::from(i))).collect();
+    shares
 }
 
 // pub fn decrypt() {

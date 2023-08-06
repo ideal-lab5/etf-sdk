@@ -1,12 +1,6 @@
 use crypto::{
-    proofs::{
-        dleq::DLEQProof, 
-        verifier::DleqVerifier,
-    },
-    encryption::aes_encrypt,
-    ibe::{
-        fullident::{Ibe, BfIbe},
-    },
+    proofs::{dleq::DLEQProof, verifier::DleqVerifier},
+    ibe::fullident::BfIbe,
     client::EtfClient,
 };
 
@@ -16,13 +10,10 @@ pub enum Error {
     DecryptionError,
 }
 
-pub struct IbeConfig {
-    pub pp: Vec<u8>,
-    pub ppub: Vec<u8>,
-}
-
 // these are the funcs that I want to compile to wasm
 pub trait EtfApi<D: DleqVerifier, E: EtfClient> {
+    
+    fn init(ibe: BfIbe) -> Self;
     /// verify the DLEQ proof
     fn verify(
         id: Vec<u8>, 
@@ -31,8 +22,8 @@ pub trait EtfApi<D: DleqVerifier, E: EtfClient> {
     ) -> bool;
 
     /// encrypt the message for the given slot ids
-    fn encrypt(&self, message: &[u8], slot_ids: Vec<Vec<u8>>) 
-        -> Result<Vec<Vec<u8>>, Error>;
+    fn encrypt(&self, message: &[u8], slot_ids: Vec<Vec<u8>>, t: u8,) 
+        -> Result<client::AesIbeCt>, Error>;
 
     // decrypt the message with the given sk
     fn decrypt(ciphertext: &[u8], sk: Vec<u8>) 
@@ -46,7 +37,7 @@ pub struct DefaultApi {
 impl<D: DleqVerifier, E: EtfClient> EtfApi<D, E> for DefaultApi {
 
 
-    pub fn init(ibe: BfIbe) -> Self {
+    fn init(ibe: BfIbe) -> Self {
         Self { ibe }
     }
 
@@ -73,19 +64,20 @@ impl<D: DleqVerifier, E: EtfClient> EtfApi<D, E> for DefaultApi {
         &self,
         message: &[u8], 
         slot_ids: Vec<Vec<u8>>,
-    ) -> Result<Vec<Vec<u8>>, Error> {
-        // let aes_out = aes_encrypt(message);
-        Ok(E::encrypt(self.ibe.clone(), Vec::new()))
-        // C::encrypt(message, slot_ids)?
-        // Ok(Vec::new())
+        t: u8,
+    ) -> Result<client::AesIbeCt, Error> {
+        // verification? t > 0
+        let res = E::encrypt(self.ibe.clone(), message, slot_ids, t)
+            .map_err(|_| Error::EncryptionError)?;
+        Ok(res)
     }
 
     fn decrypt(
         ciphertext: &[u8], 
         sk: Vec<u8>,
     ) -> Result<Vec<u8>, Error> {
-        // C::decrypt(ciphertext, sk)?
-        Ok(Vec::new())
+        let res = E::decrypt().map_err(|_| Error::DecryptionError)?;
+        Ok(res)
     }
 
 }
