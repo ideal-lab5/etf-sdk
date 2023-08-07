@@ -2,10 +2,9 @@ use aes_gcm::{
     aead::{Aead, AeadCore, AeadInPlace, KeyInit, OsRng},
     Aes256Gcm, Nonce, // Or `Aes128Gcm`
 };
-use generic_array::ArrayLength;
 use ark_std::rand::Rng;
 use ark_bls12_381::Fr;
-use ark_ff::{Zero, One, Field, PrimeField, UniformRand};
+use ark_ff::{Zero, One, Field};
 use ark_poly::{
     polynomial::univariate::DensePolynomial,
     DenseUVPolynomial, Polynomial,
@@ -38,7 +37,7 @@ pub fn aes_encrypt(message: &[u8], key: [u8;32]) -> Result<AESOutput, Error> {
     buffer.extend_from_slice(message);
     // Encrypt `buffer` in-place, replacing the plaintext contents with ciphertext
     cipher.encrypt_in_place(&nonce, b"", &mut buffer)
-        .map_err(|e| Error::EncryptionError)?;
+        .map_err(|_| Error::EncryptionError)?;
     Ok(AESOutput{
         ciphertext: buffer,
         nonce: nonce.to_vec(),

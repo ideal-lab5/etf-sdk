@@ -82,9 +82,8 @@ impl<D: DleqVerifier, E: EtfClient> EtfApi<D, E> for DefaultApi {
         capsule: Vec<Vec<u8>>, 
         sks: Vec<Vec<u8>>,
     ) -> Result<Vec<u8>, Error> {
-        // let res = E::decrypt(self.ibe.clone(), ciphertext, nonce, capsule, sks)
-        //     .map_err(|_| Error::DecryptionError)?;
-        let res = Vec::new();
+        let res = E::decrypt(self.ibe.clone(), ciphertext, nonce, capsule, sks)
+            .map_err(|_| Error::DecryptionError)?;
         Ok(res)
     }
 

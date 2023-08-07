@@ -1,14 +1,12 @@
 /// ETF CLIENT
 
 use crate::ibe::fullident::{Ibe, BfIbe, IbeCiphertext};
-use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
-use ark_ff::{PrimeField, Zero};
-use ark_std::rand::Rng;
+use ark_bls12_381::{G1Affine as G1, Fr};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use aes_gcm::aead::OsRng;
 use crate::{
     encryption::encryption::*, 
-    utils::{hash_to_g1, convert_to_bytes},
+    utils::convert_to_bytes,
 };
 
 pub struct AesIbeCt {
@@ -33,7 +31,6 @@ pub trait EtfClient {
 
     fn decrypt(
         ibe: BfIbe,
-        k: Vec<u8>,
         ciphertext: Vec<u8>,
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>,
@@ -98,7 +95,6 @@ impl EtfClient for DefaultEtfClient {
     /// used when generating the ciphertext
     fn decrypt(
         ibe: BfIbe,
-        k: Vec<u8>, // for testing only
         ciphertext: Vec<u8>,
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>,
@@ -153,6 +149,7 @@ mod test {
         let s = Fr::rand(&mut test_rng());
         let p_pub: G2 = ibe_pp.mul(s).into();
         let ibe = BfIbe::setup(ibe_pp, p_pub);
+
         match DefaultEtfClient::encrypt(ibe.clone(), message, ids.clone(), t) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
@@ -164,7 +161,8 @@ mod test {
                     o                    
                 }).collect::<Vec<_>>();
                 match DefaultEtfClient::decrypt(
-                    ibe.clone(), ct.aes_ct.key, ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets
+                    ibe.clone(), ct.aes_ct.ciphertext,
+                    ct.aes_ct.nonce, ct.etf_ct, secrets,
                 ) {
                     Ok(m) => {
                         assert_eq!(message.to_vec(), m);
