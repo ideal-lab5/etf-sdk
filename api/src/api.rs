@@ -1,7 +1,7 @@
 use crypto::{
     proofs::{dleq::DLEQProof, verifier::DleqVerifier},
     ibe::fullident::BfIbe,
-    client::EtfClient,
+    client::client::{EtfClient, AesIbeCt},
 };
 
 #[derive(Debug)]
@@ -23,10 +23,13 @@ pub trait EtfApi<D: DleqVerifier, E: EtfClient> {
 
     /// encrypt the message for the given slot ids
     fn encrypt(&self, message: &[u8], slot_ids: Vec<Vec<u8>>, t: u8,) 
-        -> Result<client::AesIbeCt>, Error>;
+        -> Result<AesIbeCt, Error>;
 
     // decrypt the message with the given sk
-    fn decrypt(ciphertext: &[u8], sk: Vec<u8>) 
+    fn decrypt(&self, ciphertext: Vec<u8>,
+        nonce: Vec<u8>,
+        capsule: Vec<Vec<u8>>, 
+        sks: Vec<Vec<u8>>,) 
         -> Result<Vec<u8>, Error>;
 }
 
@@ -65,7 +68,7 @@ impl<D: DleqVerifier, E: EtfClient> EtfApi<D, E> for DefaultApi {
         message: &[u8], 
         slot_ids: Vec<Vec<u8>>,
         t: u8,
-    ) -> Result<client::AesIbeCt, Error> {
+    ) -> Result<AesIbeCt, Error> {
         // verification? t > 0
         let res = E::encrypt(self.ibe.clone(), message, slot_ids, t)
             .map_err(|_| Error::EncryptionError)?;
@@ -73,10 +76,15 @@ impl<D: DleqVerifier, E: EtfClient> EtfApi<D, E> for DefaultApi {
     }
 
     fn decrypt(
-        ciphertext: &[u8], 
-        sk: Vec<u8>,
+        &self,
+        ciphertext: Vec<u8>,
+        nonce: Vec<u8>,
+        capsule: Vec<Vec<u8>>, 
+        sks: Vec<Vec<u8>>,
     ) -> Result<Vec<u8>, Error> {
-        let res = E::decrypt().map_err(|_| Error::DecryptionError)?;
+        // let res = E::decrypt(self.ibe.clone(), ciphertext, nonce, capsule, sks)
+        //     .map_err(|_| Error::DecryptionError)?;
+        let res = Vec::new();
         Ok(res)
     }
 

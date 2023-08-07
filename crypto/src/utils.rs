@@ -1,7 +1,7 @@
 use sha2::Digest;
 
 use ark_ff::PrimeField;
-use ark_serialize::CanonicalSerialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_bls12_381::{Fr, G1Affine};
 
@@ -49,4 +49,21 @@ pub fn h3(a: & [u8], b: &[u8]) -> Fr {
 pub fn h4(a: &[u8]) -> Vec<u8> {
     let o = sha256(a);
     o[..a.len()].to_vec()
+}
+
+// TODO: proper error handling
+/// a helper function to deserialize arkworks elements from bytes
+pub fn convert_from_bytes<E: CanonicalDeserialize, const N: usize>(
+    bytes: &[u8; N],
+) -> Option<E> {
+	E::deserialize_compressed(&bytes[..]).ok()
+}
+
+// should it be an error instead?
+/// a helper function to serialize arkworks elements to bytes
+pub fn convert_to_bytes<E: CanonicalSerialize, const N: usize>(k: E) -> [u8;N] {
+	let mut out = Vec::with_capacity(k.compressed_size());
+	k.serialize_compressed(&mut out).unwrap_or(());
+	let o: [u8; N] = out.try_into().unwrap_or([0;N]);
+	o
 }

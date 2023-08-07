@@ -14,7 +14,7 @@ use crate::utils::{hash_to_g1, h2, h3, h4};
 /// that would be ideal, then we don't need a giant 
 /// vec of these
 #[derive(CanonicalDeserialize, CanonicalSerialize)]
-pub struct Ciphertext {
+pub struct IbeCiphertext {
     pub u: G2,
     pub v: Vec<u8>,
     pub w: Vec<u8>,
@@ -26,9 +26,9 @@ pub trait Ibe {
 
     fn encrypt<R: Rng + Sized>(
         &self, message: &[u8;32], identity: &[u8], rng: R
-    ) -> Ciphertext;
+    ) -> IbeCiphertext;
 
-    fn decrypt(&self, ciphertext: Ciphertext, sk: G1) -> Vec<u8>;
+    fn decrypt(&self, ciphertext: IbeCiphertext, sk: G1) -> Vec<u8>;
 }
 
 /// a struct to hold IBE public params
@@ -63,7 +63,7 @@ impl Ibe for BfIbe {
         message: &[u8;32],
         identity: &[u8],
         mut rng: R,
-    ) -> Ciphertext {
+    ) -> IbeCiphertext {
         // random sigma in {0, 1}^32
         let t: Vec<u8> = (0..32).map(|_| rng.next_u32() as u8).collect();
         let sigma = h4(&t);
@@ -83,7 +83,7 @@ impl Ibe for BfIbe {
         let w_rhs = h4(&sigma);
         let w_out = cross_product_32(message, &w_rhs);
         // (rP, sigma (+) H2(e(Q_id, P_pub)), message (+) H4(sigma))
-        Ciphertext {
+        IbeCiphertext {
             u: u, 
             v: v_out.to_vec(), 
             w: w_out.to_vec(),
@@ -96,7 +96,7 @@ impl Ibe for BfIbe {
     ///
     fn decrypt(
         &self,
-        ciphertext: Ciphertext,
+        ciphertext: IbeCiphertext,
         sk: G1,
     ) -> Vec<u8> {
         // sigma = V (+) H2(e(d_id, U))
@@ -117,6 +117,7 @@ impl Ibe for BfIbe {
 
 }
 
+// TODO: can do this in place instead
 fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
     let mut o = a.clone().to_owned();
     for (i, ri) in o.iter_mut().enumerate().take(32) {
@@ -136,7 +137,7 @@ mod test {
     use ark_std::{UniformRand, rand::RngCore};
 
     #[test]
-    pub fn can_encrypt() {
+    pub fn can_encrypt_and_decrypt() {
         // setup
         let id_string = b"example@test.com";
         // a dummy message
