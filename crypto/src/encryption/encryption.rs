@@ -107,7 +107,6 @@ pub fn interpolate(evaluations: Vec<(Fr, Fr)>) -> Fr {
 mod test {
     use super::*;
     use ark_std::test_rng;
-    use ark_serialize::CanonicalSerialize;
 
     #[test]
     pub fn aes_encrypt_decrypt_works() {
@@ -118,12 +117,12 @@ mod test {
                     Ok(plaintext) => {
                         assert_eq!(msg.to_vec(), plaintext);
                     }, 
-                    Err(e) => {
+                    Err(_) => {
                         panic!("test should pass");
                     }
                 }
             },
-            Err(e) => {
+            Err(_) => {
                 panic!("test should pass");
             }
         }
@@ -134,8 +133,7 @@ mod test {
     fn secrets_interpolation() {
         let n = 5; // Number of participants
         let t = 3; // Threshold
-        let mut rng = ark_std::test_rng();
-        let (msk, shares) = generate_secrets(n, t, &mut rng);
+        let (msk, shares) = generate_secrets(n, t, &mut test_rng());
         // Perform Lagrange interpolation
         let interpolated_msk = interpolate(shares);
         // Check if the msk and the interpolated msk match

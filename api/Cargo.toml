@@ -7,3 +7,10 @@ edition = "2021"
 
 [dependencies]
 crypto = { path = "../crypto" }
+wasm-bindgen = "0.2.87"
+
+[dev-dependencies]
+ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
+ark-std = { version = "0.4.0", default-features = false }
+ark-ec = { version = "0.4.0", default-features = false }
+ark-serialize = { version = "0.4.0", default-features = false }

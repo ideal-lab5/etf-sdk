@@ -130,7 +130,7 @@ mod test {
     use super::*;
     use ark_bls12_381::{Fr, G2Projective as G2};
     use ark_ff::UniformRand;
-    use ark_ec::{AffineRepr, Group};
+    use ark_ec::Group;
     use ark_std::{test_rng, ops::Mul};
     use crate::utils::hash_to_g1;
 

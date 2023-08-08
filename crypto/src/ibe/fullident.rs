@@ -22,6 +22,9 @@ pub struct IbeCiphertext {
 
 pub trait Ibe {
 
+    // TODO: reconsider this here
+    fn new(ibe_pp: Vec<u8>, p_pub: Vec<u8>) -> Self;
+
     fn setup(ibe_pp: G2, p_pub: G2) -> Self;
 
     fn encrypt<R: Rng + Sized>(
@@ -45,6 +48,12 @@ pub struct BfIbe {
 /// based on the BF-IBE except using bilinear map from G1 * G2 -> G2
 ///
 impl Ibe for BfIbe {
+
+    fn new(ibe_pp: Vec<u8>, p_pub: Vec<u8>) -> Self {
+        let i = G2::deserialize_compressed(&ibe_pp[..]).unwrap();
+        let p = G2::deserialize_compressed(&p_pub[..]).unwrap();
+        Self::setup(i, p)
+    }
 
     /// setup the IBE, providing public parameters
     ///could include a proof that P_pub was calculated from sP ?
