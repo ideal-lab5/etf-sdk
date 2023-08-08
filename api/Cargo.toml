@@ -4,13 +4,33 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lib]
+crate-type = [
+    "cdylib",
+    "rlib", 
+]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
 
 [dependencies]
 crypto = { path = "../crypto" }
-wasm-bindgen = "0.2.87"
+serde-wasm-bindgen = { version = "0.4", default-features = false}
+wasm-bindgen = { version = "0.2", default-features = false}
+serde = { version = "1.0.160", default-features = false, features = ["derive"]}
+ark-serialize = { version = "0.4.0", default-features = false }
+ark-std = { version = "0.4.0", default-features = false }
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
-ark-std = { version = "0.4.0", default-features = false }
 ark-ec = { version = "0.4.0", default-features = false }
-ark-serialize = { version = "0.4.0", default-features = false }

@@ -1,14 +1,26 @@
 /// ETF CLIENT
-
-use crate::ibe::fullident::{Ibe, BfIbe, IbeCiphertext};
-use ark_bls12_381::{G1Affine as G1, Fr};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use aes_gcm::aead::OsRng;
 use crate::{
-    encryption::encryption::*, 
+    encryption::encryption::*,
+    ibe::fullident::{Ibe, BfIbe, IbeCiphertext},
     utils::convert_to_bytes,
 };
+use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use aes_gcm::aead::OsRng;
+use serde::{Deserialize, Serialize};
 
+
+#[cfg(not(feature = "std"))]
+use ark_std::vec::Vec;
+#[cfg(not(feature = "std"))]
+use ark_std::marker::PhantomData;
+
+#[cfg(feature = "std")]
+use std::vec::Vec;
+#[cfg(feature = "std")]
+use std::marker::PhantomData;
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AesIbeCt {
     pub aes_ct: AESOutput,
     pub etf_ct: Vec<Vec<u8>>,
@@ -21,16 +33,17 @@ pub enum ClientError {
     DecryptionError,
 }
 
-pub trait EtfClient {
+pub trait EtfClient<I: Ibe> {
     fn encrypt(
-        ibe: BfIbe,
+        ibe_pp: Vec<u8>,
+        p_pub: Vec<u8>,
         message: &[u8],
         ids: Vec<Vec<u8>>,
         t: u8,
     ) -> Result<AesIbeCt, ClientError>; 
 
     fn decrypt(
-        ibe: BfIbe,
+        ibe_pp: Vec<u8>,
         ciphertext: Vec<u8>,
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>,
@@ -38,16 +51,13 @@ pub trait EtfClient {
     ) -> Result<Vec<u8>, ClientError>;
 }
 
-pub struct DefaultEtfClient;
+pub struct DefaultEtfClient<I> {
+    _i: PhantomData<I>,
+}
 
 /// a clent to setup and perform IBE functions
 /// uses known generator of G2 and other ranomd generator point
-impl EtfClient for DefaultEtfClient {
-    // fn setup(&self, p_pub: G2) -> Self {
-    //     Self {
-    //         Ibe::setup(G2::generator(), p_pub)
-    //     }
-    // }
+impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
 
     ///
     /// * `ibe`: a BF IBE
@@ -55,19 +65,19 @@ impl EtfClient for DefaultEtfClient {
     /// * `ids`: The ids to encrypt the message for
     /// * `t`: The threshold (when splitting the secret)
     ///
+    // TODO: should pass IbePublicParams type instead of the two vecs
     fn encrypt(
-        ibe: BfIbe,
+        ibe_pp: Vec<u8>,
+        p_pub: Vec<u8>,
         message: &[u8],
         ids: Vec<Vec<u8>>,
         t: u8,
     ) -> Result<AesIbeCt, ClientError> {
         // todo: verify: t < |ids|
+        // todo: verify public params, error handling
+        let p = G2::deserialize_compressed(&ibe_pp[..]).unwrap();
+        let q = G2::deserialize_compressed(&p_pub[..]).unwrap();
         let (msk, shares) = generate_secrets(ids.len() as u8, t, &mut OsRng);
-        let copy = interpolate(shares.clone());
-        // assert!(shares.len() == ids.len());
-        println!("shares {:?}", shares);
-        println!("{:?}", msk);
-        println!("{:?}", copy);
         let msk_bytes = convert_to_bytes::<Fr, 32>(msk);
         let ct_aes = aes_encrypt(message, msk_bytes.try_into().expect("should be 32 bytes;qed"))
             .map_err(|_| ClientError::AesEncryptError)?;
@@ -81,7 +91,7 @@ impl EtfClient for DefaultEtfClient {
             let mut b = Vec::with_capacity(s.compressed_size());
             s.serialize_compressed(&mut b).unwrap();
 
-            let ct = ibe.encrypt(&b.try_into().unwrap(), id, OsRng);
+            let ct = I::encrypt(p.into(), q.into(), &b.try_into().unwrap(), id, OsRng);
             let mut o = Vec::with_capacity(ct.compressed_size());
             // TODO: handle errors
             ct.serialize_compressed(&mut o).unwrap();
@@ -94,7 +104,7 @@ impl EtfClient for DefaultEtfClient {
     /// * `secrets`: an ordered list of secrets, the order should match the order
     /// used when generating the ciphertext
     fn decrypt(
-        ibe: BfIbe,
+        ibe_pp: Vec<u8>,
         ciphertext: Vec<u8>,
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>,
@@ -103,19 +113,20 @@ impl EtfClient for DefaultEtfClient {
         // first need to recover the secret using decryption from future (i.e. IBE)
         // let mut secret_scalar = Fr::zero();
         let mut dec_secrets: Vec<(Fr, Fr)> = Vec::new();
+        let p = G2::deserialize_compressed(&ibe_pp[..]).unwrap();
         for (idx, e) in capsule.iter().enumerate() {
             // convert bytes to Fr
             let ct = IbeCiphertext::deserialize_compressed(&e[..])
                 .map_err(|_| ClientError::DeserializationError)?;
             let sk = G1::deserialize_compressed(&secrets[idx][..])
                 .map_err(|_| ClientError::DeserializationError)?;
-            let share_bytes = ibe.decrypt(ct, sk.into());
+            let share_bytes = I::decrypt(p.into(), ct, sk.into());
             let share = Fr::deserialize_compressed(&share_bytes[..]).unwrap();
             dec_secrets.push((Fr::from((idx + 1) as u8), share));
         }
         let secret_scalar = interpolate(dec_secrets);
-        let mut o = Vec::new();
-        secret_scalar.serialize_compressed(&mut o).map_err(|_| ClientError::DeserializationError)?;
+        let o = convert_to_bytes::<Fr, 32>(secret_scalar);
+            // .map_err(|_| ClientError::DeserializationError)?;
         let plaintext = aes_decrypt(ciphertext, &nonce, &o)
             .map_err(|_| ClientError::DecryptionError)?;
 
@@ -148,21 +159,23 @@ mod test {
         let ibe_pp: G2 = G2::generator().into();
         let s = Fr::rand(&mut test_rng());
         let p_pub: G2 = ibe_pp.mul(s).into();
-        let ibe = BfIbe::setup(ibe_pp, p_pub);
 
-        match DefaultEtfClient::encrypt(ibe.clone(), message, ids.clone(), t) {
+        let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
+        let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
+
+        match DefaultEtfClient::<BfIbe>::encrypt(
+            ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
+            message, ids.clone(), t,
+        ) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
                 let secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
                     let q = hash_to_g1(&id);
                     let d = q.mul(s);
-                    let mut o = Vec::with_capacity(d.compressed_size());
-                    d.serialize_compressed(&mut o).unwrap();
-                    o                    
+                    convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
-                match DefaultEtfClient::decrypt(
-                    ibe.clone(), ct.aes_ct.ciphertext,
-                    ct.aes_ct.nonce, ct.etf_ct, secrets,
+                match DefaultEtfClient::<BfIbe>::decrypt(
+                    ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets, 
                 ) {
                     Ok(m) => {
                         assert_eq!(message.to_vec(), m);

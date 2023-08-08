@@ -4,6 +4,8 @@ members = [
     "crypto",
 ]
 
-
 [workspace.metadata.release]
 dependent-version = "fix"
+
+[profile.release]
+lto = true

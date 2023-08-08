@@ -20,6 +20,12 @@ use rand_chacha::{
     rand_core::{RngCore, SeedableRng},
 };
 
+#[cfg(not(feature = "std"))]
+use ark_std::vec::Vec;
+
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
 #[derive(PartialEq, Clone)]
 pub struct IbSignature {
     pub s: G1,

@@ -9,7 +9,15 @@ use ark_poly::{
     polynomial::univariate::DensePolynomial,
     DenseUVPolynomial, Polynomial,
 };
+use serde::{Deserialize, Serialize};
 
+#[cfg(not(feature = "std"))]
+use ark_std::vec::Vec;
+
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AESOutput {
     pub ciphertext: Vec<u8>,
     pub nonce: Vec<u8>,

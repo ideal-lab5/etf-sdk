@@ -7,6 +7,13 @@ use ark_std::{
     ops::Mul,
     rand::Rng,
 };
+
+#[cfg(not(feature = "std"))]
+use ark_std::vec::Vec;
+
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
 use crate::utils::{hash_to_g1, h2, h3, h4};
 
 /// a ciphertext (U, V, W)
@@ -22,16 +29,12 @@ pub struct IbeCiphertext {
 
 pub trait Ibe {
 
-    // TODO: reconsider this here
-    fn new(ibe_pp: Vec<u8>, p_pub: Vec<u8>) -> Self;
-
-    fn setup(ibe_pp: G2, p_pub: G2) -> Self;
-
     fn encrypt<R: Rng + Sized>(
-        &self, message: &[u8;32], identity: &[u8], rng: R
+        ibe_pp: G2, p_pub: G2,
+        message: &[u8;32], identity: &[u8], rng: R
     ) -> IbeCiphertext;
 
-    fn decrypt(&self, ciphertext: IbeCiphertext, sk: G1) -> Vec<u8>;
+    fn decrypt(ibe_pp: G2, ciphertext: IbeCiphertext, sk: G1) -> Vec<u8>;
 }
 
 /// a struct to hold IBE public params
@@ -39,27 +42,12 @@ pub trait Ibe {
     Debug, Clone, 
     CanonicalDeserialize, CanonicalSerialize,
 )]
-pub struct BfIbe {
-    pub ibe_pp: G2,
-    pub p_pub: G2,
-}
+pub struct BfIbe;
 
 /// the IBE implementation
 /// based on the BF-IBE except using bilinear map from G1 * G2 -> G2
 ///
 impl Ibe for BfIbe {
-
-    fn new(ibe_pp: Vec<u8>, p_pub: Vec<u8>) -> Self {
-        let i = G2::deserialize_compressed(&ibe_pp[..]).unwrap();
-        let p = G2::deserialize_compressed(&p_pub[..]).unwrap();
-        Self::setup(i, p)
-    }
-
-    /// setup the IBE, providing public parameters
-    ///could include a proof that P_pub was calculated from sP ?
-    fn setup(ibe_pp: G2, p_pub: G2) -> Self {
-        Self { ibe_pp, p_pub }
-    }
 
     /// encrypt the message for the given identity
     ///
@@ -68,7 +56,8 @@ impl Ibe for BfIbe {
     /// * `rng`: A random number generator
     ///
     fn encrypt<R: Rng + Sized>(
-        &self,
+        ibe_pp: G2,
+        p_pub: G2,
         message: &[u8;32],
         identity: &[u8],
         mut rng: R,
@@ -79,12 +68,12 @@ impl Ibe for BfIbe {
         // r= H3(sigma, message)
         let r = h3(&sigma, message);
         // U = rP
-        let u: G2 = self.ibe_pp.mul(r); // U = rP
+        let u: G2 = ibe_pp.mul(r); // U = rP
     
         // calc identity point
         let q = hash_to_g1(&identity);
         // e(Q_id, P_pub)
-        let g_id = Bls12_381::pairing(q, self.p_pub).mul(r);
+        let g_id = Bls12_381::pairing(q, p_pub).mul(r);
         // sigma (+) H2(e(Q_id, P_pub))
         let v_rhs = h2(g_id);
         let v_out = cross_product_32(&sigma, &v_rhs);
@@ -104,7 +93,7 @@ impl Ibe for BfIbe {
     /// * `sk`: The appropriate identity's secret key
     ///
     fn decrypt(
-        &self,
+        ibe_pp: G2,
         ciphertext: IbeCiphertext,
         sk: G1,
     ) -> Vec<u8> {
@@ -118,7 +107,7 @@ impl Ibe for BfIbe {
 
         // check: U =? rP
         let r = h3(&sigma, &m);
-        let u_check = self.ibe_pp.mul(r);
+        let u_check = ibe_pp.mul(r);
         assert!(u_check.eq(&ciphertext.u));
 
         m
@@ -159,12 +148,11 @@ mod test {
         let ibe_pp = G2::rand(&mut rng);
         let p_pub = ibe_pp.mul(msk);
 
-        let ibe = BfIbe::setup(ibe_pp, p_pub);
-        let ct = ibe.encrypt(&message, id_string, &mut rng);
+        let ct = BfIbe::encrypt(ibe_pp, p_pub, &message, id_string, &mut rng);
         // then calculate our own secret
         let d = hash_to_g1(id_string).mul(msk);
 
-        let recovered_message = ibe.decrypt(ct, d);
+        let recovered_message = BfIbe::decrypt(ibe_pp, ct, d);
         let message_vec = message.to_vec();
         assert_eq!(message_vec, recovered_message);
     }
