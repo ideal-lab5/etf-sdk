@@ -26,10 +26,25 @@ pub struct EtfApiWrapper {
 impl EtfApiWrapper {
 
     #[wasm_bindgen(constructor)]
-    pub fn init(p: JsValue, q: JsValue) -> Self {
+    pub fn create(p: JsValue, q: JsValue) -> Self {
+        // TODO: verification
         Self { pps: (p, q) }
     }
 
+    #[wasm_bindgen]
+    pub fn version(&self) -> JsValue {
+        serde_wasm_bindgen::to_value(b"v0.0.1").unwrap()
+    }
+
+    #[wasm_bindgen]
+    pub fn test(&self, bytes: JsValue) {
+        let _slot_ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(bytes).unwrap();
+    }
+
+    /// a wrapper function around the DefaultApi 'encrypt' implementation
+    /// returns a ciphertext blob containing both aes ct and etf ct
+    ///
+    ///
     #[wasm_bindgen]
     pub fn encrypt(
         &self,
@@ -43,7 +58,8 @@ impl EtfApiWrapper {
         let message : Vec<u8> = serde_wasm_bindgen::from_value(message_bytes)?;
         // this is going to get tricky with the wasm build..
         let slot_ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(slot_id_bytes)?;
-
+        // let slot_ids = vec![vec![1, 2, 3]];
+        // TODO: this should probably be an async future... in the future
         let out = 
             DefaultApi::<IbeDleqVerifier, BfIbe, DefaultEtfClient<BfIbe>>::encrypt(
                 ibe_pp, p_pub, &message, slot_ids, t).unwrap();
@@ -51,8 +67,24 @@ impl EtfApiWrapper {
     }
 
     #[wasm_bindgen]
-    pub fn decrypt() -> Result<JsValue, serde_wasm_bindgen::Error> {
-        // todo!();
+    pub fn decrypt(
+        &self,
+        ciphertext_bytes: JsValue, // Vec<u8>
+        nonce_bytes: JsValue, // Vec<u8>
+        capsule_bytes: JsValue, // Vec<Vec<u8>>
+        sks_bytes: JsValue, // Vec<Vec<u8>>
+    ) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        let ibe_pp : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.0.clone())?;
+        let ct: Vec<u8>  = serde_wasm_bindgen::from_value(ciphertext_bytes)?;
+        let nonce: Vec<u8>  = serde_wasm_bindgen::from_value(nonce_bytes)?;
+
+        let capsule: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(capsule_bytes)?;
+        let sks: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(sks_bytes)?;
+
+        let out = 
+            DefaultApi::<IbeDleqVerifier, BfIbe, DefaultEtfClient<BfIbe>>::decrypt(
+                ibe_pp, ct, nonce, capsule, sks).unwrap();
+        serde_wasm_bindgen::to_value(&out)
     }
 
 }

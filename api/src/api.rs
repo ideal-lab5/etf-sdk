@@ -183,16 +183,15 @@ pub mod tests {
         let mut p_pub_bytes = Vec::new();
         p_pub.serialize_compressed(&mut p_pub_bytes).unwrap();
 
-         // Create an instance of DefaultApi
-        //  let api: DefaultApi<MockDleqVerifier, MockEtfClient> = DefaultApi::init(&ibe_pp_bytes, &p_pub_bytes);
-
         let proof = DLEQProof::new(x, g, h, vec![], test_rng());
-        assert!(DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::verify(id.to_vec(), proof, vec![]) == true);
+        assert!(
+            DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::verify(
+                id.to_vec(), proof, vec![],
+            ) == true);
     }
 
     #[test]
     fn api_encryption_works() {
-        // let api: DefaultApi<MockDleqVerifier, MockEtfClient> = ibe_setup();
         let message = b"this is a test";
         let slot_ids = vec![b"sl1".to_vec(), b"sl2".to_vec(), b"sl3".to_vec()];
         let t = 2;
@@ -211,7 +210,6 @@ pub mod tests {
 
     #[test]
     fn api_decryption_works() {
-        // let api: DefaultApi<MockDleqVerifier, MockEtfClient> = ibe_setup();
         match DefaultApi::decrypt(vec![], vec![], vec![vec![1]], vec![]) {
             Ok(_) => { },
             Err(_) => { panic!("the decrypt call should work") },

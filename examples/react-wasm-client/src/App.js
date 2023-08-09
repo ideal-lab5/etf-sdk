@@ -1,80 +1,46 @@
 /* global BigInt */
 import './App.css';
-import { 
-  keygen, calculate_secret, 
-  calculate_pubkey, combine_pubkeys,
-  combine_secrets, encrypt, threshold_decrypt
-} from "dkg";
-import { useWasm } from './useWasm';
-import { useState } from 'react';
-
+import init, { EtfApiWrapper } from "etf";
+import React, { useEffect, useState } from 'react';
 
 function App() {
-  // make sure the wasm blob is loaded
-  useWasm();
+  
+  const [api, setApi] = useState(null);
 
-  const [societySize, setSocietySize] = useState(0);
-  const [threshold, setThreshold] = useState(0);
-  const [society, setSociety] = useState([]);
+  useEffect(() => {
+    let p = new Uint8Array([1, 2]);
+    let q = new Uint8Array([1, 3]);
+    init().then(_ => {
+      console.log('wasm initialized successfully');
+      let api = new EtfApiWrapper(p, q);
+      console.log('etf api initialized');
+      let version = String.fromCharCode(...api.version());
+      console.log('version ' + version);
+      // api.test(new Uint8Array([new Uint8Array([1, 2, 3])]));
+      setApi(api);
+  });
+  }, [])
 
-  const handleKeygen = () => {
-    // each participant must agree on two numbers
-    let r1 = 45432;
-    let r2 = 48484;
-    let results = [];
-    // each participant independently generates a polynomial and calulates their keys
-    for (let i = 0; i < societySize; i++) {
-      // generate random number 
-      let r = 23;
-      let poly = keygen(BigInt(r), threshold);
-      let secret = calculate_secret(poly.coeffs);
-      let pubkey = calculate_pubkey(BigInt(r1), BigInt(r2), secret)
-      results.push({
-        i: i,
-        pubkey: pubkey,
-        secret: secret,
-      });
-    };
-    setSociety(results);
+
+  function encrypt() {
+    // let t = new TextEncoder();
+    // // await api.encrypt(...)
+    // let ids = [t.encode("test_id_0"), t.encode("test_id_1")];
+
+    // let ct = api.encrypt(t.encode("hello world"), ids, 1);
+    // console.log(ct);
   }
 
-  const calculateGroupPublicKey = () => {
-    return society.reduce((a, b) => combine_pubkeys(a.pubkey, b.pubkey));
-  }
-
-  const calculateGroupSecretKey = () => {
-    return society.reduce((a, b) => combine_secrets(a.secret, b.secret));
-  }
-
-
+  // const ApiTest = React.lazy(() => import('./Api'));
 
   return (
     <div className="App">
       <div>
-        <h2>DKG Wasm Example</h2>
-        <p>Generate keys, encrypt and decrypt messages</p>
+        <h2>ETF WASM EXAMPLE</h2>
+        <div>
+          <p>Encryption test: `Hello World`</p>
+          <button onClick={() => encrypt()}>Encrypt message</button>
       </div>
-      <div className='body'>
-        { society.length === 0 ? 
-        <div className='section'>
-          <span>
-            Generate keys
-          </span>
-          <label htmlFor='society-size-input'>Set number of participants</label>
-          {societySize}
-          <input id='society-size-input' type='number' value={societySize} onChange={(e) => setSocietySize(e.target.value)} />
-          <label htmlFor='threshold-input'>Set threshold</label>
-          <input id='threshold-input' type='number' value={threshold} onChange={(e) => setThreshold(e.target.value)} />
-          <button onClick={handleKeygen}> Keygen
-          </button>
-        </div>
-        : 
-        <div className='section'>
-          <span>There are `{society.length}` participants.</span>
-          <span>The group secret key is `{JSON.stringify(calculateGroupSecretKey())}` </span>
-          <span>The group public key is `{JSON.stringify(calculateGroupPublicKey())}`</span>
-        </div>
-        }
       </div>
     </div>
   );

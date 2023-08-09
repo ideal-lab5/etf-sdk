@@ -4,7 +4,7 @@ wasm wrappers for the dkg core library, allows for use within the browser
 
 ## Build
 
-First build the dkg lib and the wasm. From the [dkg-wasm](../dkg-wasm/) directory, run:
+First build the api lib and compile the was wasm. From the [api](../api/) directory, run the `wasm_build.sh` script:
 
 ``` bash
 cargo build
