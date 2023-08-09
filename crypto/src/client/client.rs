@@ -112,10 +112,9 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         capsule: Vec<Vec<u8>>,
         secrets: Vec<Vec<u8>>,
     ) -> Result<Vec<u8>, ClientError> {
-        // first need to recover the secret using decryption from future (i.e. IBE)
-        // let mut secret_scalar = Fr::zero();
         let mut dec_secrets: Vec<(Fr, Fr)> = Vec::new();
-        let p = G2::deserialize_compressed(&ibe_pp[..]).unwrap();
+        let p = G2::deserialize_compressed(&ibe_pp[..])
+            .map_err(|_| ClientError::DeserializationError)?;
         for (idx, e) in capsule.iter().enumerate() {
             // convert bytes to Fr
             let ct = IbeCiphertext::deserialize_compressed(&e[..])
@@ -123,12 +122,12 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
             let sk = G1::deserialize_compressed(&secrets[idx][..])
                 .map_err(|_| ClientError::DeserializationError)?;
             let share_bytes = I::decrypt(p.into(), ct, sk.into());
-            let share = Fr::deserialize_compressed(&share_bytes[..]).unwrap();
+            let share = Fr::deserialize_compressed(&share_bytes[..])
+                .map_err(|_| ClientError::DeserializationError)?;;
             dec_secrets.push((Fr::from((idx + 1) as u8), share));
         }
         let secret_scalar = interpolate(dec_secrets);
         let o = convert_to_bytes::<Fr, 32>(secret_scalar);
-            // .map_err(|_| ClientError::DeserializationError)?;
         let plaintext = aes_decrypt(ciphertext, &nonce, &o)
             .map_err(|_| ClientError::DecryptionError)?;
 

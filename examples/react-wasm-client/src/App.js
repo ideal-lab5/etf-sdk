@@ -1,15 +1,14 @@
 /* global BigInt */
 import './App.css';
-import init, { EtfApiWrapper, random_ibe_params } from "etf";
+import init, { EtfApiWrapper, ibe_extract, random_ibe_params } from "etf";
 import React, { useEffect, useState } from 'react';
 
 function App() {
   
   const [api, setApi] = useState(null);
+  const [ibeParams, setIbeParams] = useState(null);
 
   useEffect(() => {
-    let p = new Uint8Array([1, 2]);
-    let q = new Uint8Array([1, 3]);
     init().then(_ => {
       console.log('wasm initialized successfully');
       let ibeTestParams = random_ibe_params();
@@ -18,11 +17,12 @@ function App() {
       let version = String.fromCharCode(...api.version());
       console.log('version ' + version);
       setApi(api);
+      setIbeParams(ibeTestParams);
   });
   }, [])
 
 
-  function encrypt() {
+  function test() {
     let t = new TextEncoder();
     // await api.encrypt(...) in the future
     let ids = [
@@ -36,7 +36,12 @@ function App() {
 
     try {
       let ct = api.encrypt(message, ids, threshold);
-      console.log(JSON.stringify(ct).length);
+      console.log(JSON.stringify(ct));
+      console.log("Running IBE extract to get ibe secrets");
+      let sks = ibe_extract(ibeParams.s, ids);
+      console.log(sks);
+      let plaintext = api.decrypt(ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, sks.map(sk => sk[0]));
+      console.log(String.fromCharCode(...plaintext));
     } catch(e) {
       console.log(e);
     }
@@ -48,7 +53,7 @@ function App() {
         <h2>ETF WASM EXAMPLE</h2>
         <div>
           <p>Encryption test: `Hello World`</p>
-          <button onClick={() => encrypt()}>Encrypt message</button>
+          <button onClick={() => test()}>Encrypt message</button>
       </div>
       </div>
     </div>
