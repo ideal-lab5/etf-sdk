@@ -1,6 +1,6 @@
 use crypto::{
     proofs::{dleq::DLEQProof, verifier::DleqVerifier},
-    ibe::fullident::{Ibe, BfIbe},
+    ibe::fullident::Ibe,
     client::client::{EtfClient, AesIbeCt},
 };
 

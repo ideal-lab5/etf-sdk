@@ -1,7 +1,7 @@
 /// ETF CLIENT
 use crate::{
     encryption::encryption::*,
-    ibe::fullident::{Ibe, BfIbe, IbeCiphertext},
+    ibe::fullident::{Ibe, IbeCiphertext},
     utils::convert_to_bytes,
 };
 use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
@@ -123,7 +123,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
                 .map_err(|_| ClientError::DeserializationError)?;
             let share_bytes = I::decrypt(p.into(), ct, sk.into());
             let share = Fr::deserialize_compressed(&share_bytes[..])
-                .map_err(|_| ClientError::DeserializationError)?;;
+                .map_err(|_| ClientError::DeserializationError)?;
             dec_secrets.push((Fr::from((idx + 1) as u8), share));
         }
         let secret_scalar = interpolate(dec_secrets);
@@ -144,6 +144,7 @@ mod test {
     use ark_ff::UniformRand;
     use ark_ec::Group;
     use ark_std::{test_rng, ops::Mul};
+    use crate::ibe::fullident::BfIbe;
     use crate::utils::hash_to_g1;
 
     #[test]
