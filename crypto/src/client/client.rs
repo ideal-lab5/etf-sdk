@@ -75,8 +75,10 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
     ) -> Result<AesIbeCt, ClientError> {
         // todo: verify: t < |ids|
         // todo: verify public params, error handling
-        let p = G2::deserialize_compressed(&ibe_pp[..]).unwrap();
-        let q = G2::deserialize_compressed(&p_pub[..]).unwrap();
+        let p = G2::deserialize_compressed(&ibe_pp[..])
+            .map_err(|_| ClientError::DeserializationError)?;
+        let q = G2::deserialize_compressed(&p_pub[..])
+            .map_err(|_| ClientError::DeserializationError)?;
         let (msk, shares) = generate_secrets(ids.len() as u8, t, &mut OsRng);
         let msk_bytes = convert_to_bytes::<Fr, 32>(msk);
         let ct_aes = aes_encrypt(message, msk_bytes.try_into().expect("should be 32 bytes;qed"))

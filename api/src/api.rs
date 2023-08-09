@@ -23,8 +23,13 @@ pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
     ) -> bool;
 
     /// encrypt the message for the given slot ids
-    fn encrypt(ibe_pp_bytes: Vec<u8>, p_pub: Vec<u8>, message: &[u8], slot_ids: Vec<Vec<u8>>, t: u8,) 
-        -> Result<AesIbeCt, Error>;
+    fn encrypt(
+        ibe_pp_bytes: Vec<u8>, 
+        p_pub: Vec<u8>, 
+        message: &[u8], 
+        slot_ids: Vec<Vec<u8>>, 
+        t: u8,
+    ) -> Result<AesIbeCt, Error>;
 
     // decrypt the message with the given sk
     fn decrypt(
@@ -32,8 +37,8 @@ pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
         ciphertext: Vec<u8>,
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>, 
-        sks: Vec<Vec<u8>>,) 
-        -> Result<Vec<u8>, Error>;
+        sks: Vec<Vec<u8>>,
+    ) -> Result<Vec<u8>, Error>;
 }
 
 ///  the default implementation of the etf api
@@ -65,6 +70,7 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
 
     /// encrypt a message using AES-GCM
     /// with the ephemeral secret split into shares and encrypted for the future slot ids
+    /// TODO: more intelligent error mapping...
     ///
     fn encrypt(
         ibe_pp_bytes: Vec<u8>,

@@ -1,10 +1,16 @@
 use wasm_bindgen::prelude::*;
 use ark_serialize::CanonicalSerialize;
+use ark_std::{test_rng, UniformRand, ops::Mul};
+use ark_bls12_381::{Fr, G2Affine as G2};
+use ark_ec::AffineRepr;
 use crypto::{
     ibe::fullident::{BfIbe, Ibe},
     proofs::verifier::IbeDleqVerifier,
     client::client::{AesIbeCt, DefaultEtfClient},
+    utils::convert_to_bytes,
 };
+use serde::{Deserialize, Serialize};
+
 use crate::api::{
     EtfApi, DefaultApi,
 };
@@ -25,6 +31,7 @@ pub struct EtfApiWrapper {
 #[wasm_bindgen]
 impl EtfApiWrapper {
 
+    /// p and q are the IBE parameters, both elements of G2
     #[wasm_bindgen(constructor)]
     pub fn create(p: JsValue, q: JsValue) -> Self {
         // TODO: verification
@@ -34,11 +41,6 @@ impl EtfApiWrapper {
     #[wasm_bindgen]
     pub fn version(&self) -> JsValue {
         serde_wasm_bindgen::to_value(b"v0.0.1").unwrap()
-    }
-
-    #[wasm_bindgen]
-    pub fn test(&self, bytes: JsValue) {
-        let _slot_ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(bytes).unwrap();
     }
 
     /// a wrapper function around the DefaultApi 'encrypt' implementation
@@ -51,19 +53,23 @@ impl EtfApiWrapper {
         message_bytes: JsValue, // &[u8], 
         slot_id_bytes: JsValue, // Vec<Vec<u8>>,
         t: u8,
-    ) -> Result<JsValue, serde_wasm_bindgen::Error> {
+    ) -> Result<JsValue, JsError> {
         // convert JsValue to types
-        let ibe_pp : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.0.clone())?;
-        let p_pub : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.1.clone())?;
-        let message : Vec<u8> = serde_wasm_bindgen::from_value(message_bytes)?;
-        // this is going to get tricky with the wasm build..
-        let slot_ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(slot_id_bytes)?;
-        // let slot_ids = vec![vec![1, 2, 3]];
+        let ibe_pp : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.0.clone())
+            .map_err(|_| JsError::new("could not decode ibe pp"))?;
+        let p_pub : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.1.clone())
+            .map_err(|_| JsError::new("could not decode p pub"))?;
+        let message : Vec<u8> = serde_wasm_bindgen::from_value(message_bytes)
+            .map_err(|_| JsError::new("could not decode message"))?;
+        let slot_ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(slot_id_bytes)
+            .map_err(|_| JsError::new("could not decode slot ids"))?;
         // TODO: this should probably be an async future... in the future
         let out = 
             DefaultApi::<IbeDleqVerifier, BfIbe, DefaultEtfClient<BfIbe>>::encrypt(
-                ibe_pp, p_pub, &message, slot_ids, t).unwrap();
+                ibe_pp, p_pub, &message, slot_ids, t)
+                    .map_err(|e| JsError::new("encrypt failed"))?;
         serde_wasm_bindgen::to_value(&out)
+            .map_err(|_| JsError::new("could not convert to JsValue"))
     }
 
     #[wasm_bindgen]
@@ -86,5 +92,23 @@ impl EtfApiWrapper {
                 ibe_pp, ct, nonce, capsule, sks).unwrap();
         serde_wasm_bindgen::to_value(&out)
     }
+}
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IbeTestParams {
+    pub p: Vec<u8>,
+    pub q: Vec<u8>,
+}
+
+// TODO: wrap this in a feature? how do features work with wasm?
+#[wasm_bindgen]
+pub fn random_ibe_params() -> Result<JsValue, JsError> {
+    let ibe_pp: G2 = G2::generator().into();
+    let s = Fr::rand(&mut test_rng());
+    let p_pub: G2 = ibe_pp.mul(s).into();
+
+    serde_wasm_bindgen::to_value(&IbeTestParams {
+        p: convert_to_bytes::<G2, 96>(ibe_pp).to_vec(),
+        q: convert_to_bytes::<G2, 96>(p_pub).to_vec(),
+    }).map_err(|_| JsError::new("could not convert ibe test params to JsValue"))
 }
