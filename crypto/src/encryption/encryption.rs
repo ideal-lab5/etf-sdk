@@ -4,7 +4,7 @@ use aes_gcm::{
 };
 use ark_std::rand::Rng;
 use ark_bls12_381::Fr;
-use ark_ff::{Zero, One, Field};
+use ark_ff::{Zero, One, Field, UniformRand};
 use ark_poly::{
     polynomial::univariate::DensePolynomial,
     DenseUVPolynomial, Polynomial,
@@ -18,6 +18,7 @@ use ark_std::vec::Vec;
 use std::vec::Vec;
 
 #[derive(Debug, Serialize, Deserialize)]
+// #[derive(Debug)]
 pub struct AESOutput {
     pub ciphertext: Vec<u8>,
     pub nonce: Vec<u8>,
@@ -72,6 +73,12 @@ pub fn aes_decrypt(ciphertext: Vec<u8>, nonce_slice: &[u8], key: &[u8]) -> Resul
 ///
 pub fn generate_secrets<R: Rng + Sized>(
     n: u8, t: u8, mut rng: R) -> (Fr, Vec<(Fr, Fr)>) {
+    
+    if n == 1 {
+        let r = Fr::rand(&mut rng);
+        return (r, vec![(Fr::zero(), r)]);
+    }
+
     let f = DensePolynomial::<Fr>::rand(t as usize, &mut rng);
     let msk = f.evaluate(&Fr::zero());
     let evals: Vec<(Fr, Fr)> = (1..n+1)

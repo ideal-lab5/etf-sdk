@@ -1,6 +1,6 @@
 [package]
-name = "etf-api"
-version = "0.1.0"
+name = "etf-sdk"
+version = "0.0.1-dev"
 edition = "2021"
 license = "GPL3"
 description = "An API for calling etf crypto primitives for encryption and proof verification"

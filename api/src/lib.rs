@@ -108,6 +108,7 @@ pub struct IbeTestParams {
     pub s: Vec<u8>,
 }
 
+// the functions below are for testing purposes only
 // TODO: wrap this in a feature? how do features work with wasm?
 #[wasm_bindgen]
 pub fn random_ibe_params() -> Result<JsValue, JsError> {

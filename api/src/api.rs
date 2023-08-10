@@ -101,15 +101,16 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use ark_std::{test_rng, UniformRand, ops::Mul};
-    use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
+    use ark_std::{test_rng, UniformRand, ops::Mul, rand::Rng};
+    use ark_bls12_381::{G1Affine as G1, G2Affine as G2, G1Projective, G2Projective, Fr};
     use ark_ec::AffineRepr;
     use ark_serialize::CanonicalSerialize;
     use crypto::{
         utils::hash_to_g1,
         client::client::AesIbeCt,
-        ibe::fullident::Ibe,
+        ibe::fullident::{IbeCiphertext, Ibe, BfIbe},
         encryption::encryption::AESOutput,
+        utils::convert_to_bytes,
     };
 
 
@@ -126,11 +127,11 @@ pub mod tests {
     // A mock implementation of EtfClient trait for testing
     struct MockEtfClient;
 
-    impl EtfClient for MockEtfClient {
+    impl<I: Ibe> EtfClient<I> for MockEtfClient {
         // Implement the required methods for the trait
  
         fn encrypt(
-            _ibe: BfIbe, _m: &[u8], _ids: Vec<Vec<u8>>, _t: u8,
+            _p: Vec<u8>, _q: Vec<u8>, _m: &[u8], _ids: Vec<Vec<u8>>, _t: u8,
         ) -> Result<AesIbeCt, crypto::client::client::ClientError> {
             Ok(AesIbeCt {
                 aes_ct: AESOutput {
@@ -142,7 +143,7 @@ pub mod tests {
             })
         }
         fn decrypt(
-            _ibe: BfIbe, 
+            _p: Vec<u8>, 
             _ct: Vec<u8>, 
             _nonce: Vec<u8>, 
             _capsule: Vec<Vec<u8>>, 
@@ -156,8 +157,8 @@ pub mod tests {
 
     impl Ibe for MockIbe {
         fn encrypt<R: Rng + Sized>(
-            ibe_pp: G2, 
-            p_pub: G2,
+            ibe_pp: G2Projective, 
+            p_pub: G2Projective,
             message: &[u8;32], 
             identity: &[u8], 
             rng: R
@@ -165,7 +166,7 @@ pub mod tests {
             IbeCiphertext{ u: ibe_pp, v: Vec::new(), w: Vec::new() }
         }
     
-        fn decrypt(ibe_pp: G2, ciphertext: IbeCiphertext, sk: G1) -> Vec<u8> {
+        fn decrypt(ibe_pp: G2Projective, ciphertext: IbeCiphertext, sk: G1Projective) -> Vec<u8> {
             Vec::new()
         }
     }
@@ -192,8 +193,7 @@ pub mod tests {
         let proof = DLEQProof::new(x, g, h, vec![], test_rng());
         assert!(
             DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::verify(
-                id.to_vec(), proof, vec![],
-            ) == true);
+                id.to_vec(), proof, vec![]) == true);
     }
 
     #[test]
@@ -208,17 +208,19 @@ pub mod tests {
         let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
-        match DefaultApi::encrypt(ibe_pp_bytes, p_pub_bytes, message, slot_ids, t) {
-            Ok(_) => { },
-            Err(_) => { panic!("the encrypt call should work") },
+        match DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::
+            encrypt(ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(), message, slot_ids, t) {
+                Ok(_) => { },
+                Err(_) => { panic!("the encrypt call should work") },
         }
     }
 
     #[test]
     fn api_decryption_works() {
-        match DefaultApi::decrypt(vec![], vec![], vec![vec![1]], vec![]) {
-            Ok(_) => { },
-            Err(_) => { panic!("the decrypt call should work") },
+        match DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::
+            decrypt(vec![], vec![], vec![], vec![vec![1]], vec![]) {
+                Ok(_) => { },
+                Err(_) => { panic!("the decrypt call should work") },
         }
     }
 }
