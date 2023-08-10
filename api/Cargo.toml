@@ -1,0 +1,30 @@
+[package]
+name = "etf-api"
+version = "0.1.0"
+edition = "2021"
+license = "GPL3"
+description = "An API for calling etf crypto primitives for encryption and proof verification"
+repository = "https://github.com/ideal-lab5/etf-sdk"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lib]
+crate-type = [
+    "cdylib",
+    "rlib", 
+]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[dependencies]
+crypto = { path = "../crypto" }
+serde-wasm-bindgen = { version = "0.4", default-features = false}
+wasm-bindgen = { version = "0.2", default-features = false}
+serde = { version = "1.0.160", default-features = false, features = ["derive"]}
+ark-serialize = { version = "0.4.0", default-features = false }
+ark-std = { version = "0.4.0", default-features = false }
+getrandom = { version = "0.2", features = ["js"] }
+ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
+ark-ec = { version = "0.4.0", default-features = false }

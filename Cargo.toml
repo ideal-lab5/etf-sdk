@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "api",
+    "crypto",
+]
+
+[workspace.metadata.release]
+dependent-version = "fix"
+
+[profile.release]
+lto = true

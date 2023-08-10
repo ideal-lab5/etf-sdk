@@ -1,0 +1,11 @@
+.App {
+  text-align: center;
+}
+
+.body {
+  display: inline-grid;
+}
+
+.section {
+  display: inline-grid;
+}
