@@ -18,14 +18,13 @@ use ark_std::vec::Vec;
 use std::vec::Vec;
 
 #[derive(Debug, Serialize, Deserialize)]
-// #[derive(Debug)]
 pub struct AESOutput {
     pub ciphertext: Vec<u8>,
     pub nonce: Vec<u8>,
-    // TODO: remove
     pub key: Vec<u8>,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Error {
     EncryptionError,
     DecryptionError,
@@ -38,13 +37,13 @@ pub enum Error {
 /// * `message`: The message to encrypt
 ///
 pub fn aes_encrypt(message: &[u8], key: [u8;32]) -> Result<AESOutput, Error> {
-    // let key = Aes256Gcm::generate_key(&mut OsRng);
     let cipher = Aes256Gcm::new(generic_array::GenericArray::from_slice(&key));
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
 
     let mut buffer: Vec<u8> = Vec::new(); // Note: buffer needs 16-bytes overhead for auth tag
     buffer.extend_from_slice(message);
     // Encrypt `buffer` in-place, replacing the plaintext contents with ciphertext
+    // will this error ever be thrown here? nonces should always be valid as well as buffer
     cipher.encrypt_in_place(&nonce, b"", &mut buffer)
         .map_err(|_| Error::EncryptionError)?;
     Ok(AESOutput{
@@ -103,6 +102,7 @@ pub fn interpolate(evaluations: Vec<(Fr, Fr)>) -> Fr {
         for j in 0..n {
             if i != j {
                 let denominator = evaluations[i].0 - evaluations[j].0;
+                // todo: handle unwrap?
                 basis_value *= denominator.inverse().unwrap() * evaluations[j].0;
             }
         }
@@ -143,7 +143,46 @@ mod test {
         }
     }
 
-        
+    #[test]
+    pub fn aes_encrypt_decrypt_fails_with_bad_key() {
+        let msg = b"test";
+        match aes_encrypt(msg, [2;32]) {
+            Ok(aes_out) => {
+                match aes_decrypt(aes_out.ciphertext, &aes_out.nonce, &b"hi".to_vec()) {
+                    Ok(plaintext) => {
+                        panic!("should be an error");
+                    }, 
+                    Err(e) => {
+                        assert_eq!(e, Error::InvalidKey);
+                    }
+                }
+            },
+            Err(_) => {
+                panic!("test should pass");
+            }
+        }
+    }
+     
+    #[test]
+    pub fn aes_encrypt_decrypt_fails_with_bad_nonce() {
+        let msg = b"test";
+        match aes_encrypt(msg, [2;32]) {
+            Ok(aes_out) => {
+                match aes_decrypt(aes_out.ciphertext, &vec![0,0,0,0,0,0,0,0,0,0,0,0], &aes_out.key) {
+                    Ok(_) => {
+                        panic!("should be an error");
+                    }, 
+                    Err(e) => {
+                        assert_eq!(e, Error::DecryptionError);
+                    }
+                }
+            },
+            Err(_) => {
+                panic!("test should pass");
+            }
+        }
+    }
+
     #[test]
     fn secrets_interpolation() {
         let n = 5; // Number of participants

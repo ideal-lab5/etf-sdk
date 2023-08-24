@@ -7,5 +7,9 @@ members = [
 [workspace.metadata.release]
 dependent-version = "fix"
 
+[profile.dev]
+opt-level = 1
+incremental = true
+
 [profile.release]
 lto = true

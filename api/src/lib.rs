@@ -22,6 +22,8 @@ pub enum ApiError {
     WasmBindError,
 }
 
+// TODO: enhance error types (using thiserror)
+
 /// a wrapper around the DefaultEtfClient so that it can be compiled to wasm
 #[wasm_bindgen]
 pub struct EtfApiWrapper {    
@@ -40,7 +42,7 @@ impl EtfApiWrapper {
 
     #[wasm_bindgen]
     pub fn version(&self) -> JsValue {
-        serde_wasm_bindgen::to_value(b"v0.0.1").unwrap()
+        serde_wasm_bindgen::to_value(b"v0.0.3-dev").unwrap()
     }
 
     /// a wrapper function around the DefaultApi 'encrypt' implementation
@@ -91,7 +93,6 @@ impl EtfApiWrapper {
             .map_err(|_| JsError::new("could not decode the capsule"))?;
         let sks: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(sks_bytes)
             .map_err(|_| JsError::new("could not decode the secret keys"))?;
-
         let out = 
             DefaultApi::<IbeDleqVerifier, BfIbe, DefaultEtfClient<BfIbe>>::decrypt(
                 ibe_pp, ct, nonce, capsule, sks)
@@ -110,6 +111,7 @@ pub struct IbeTestParams {
 
 // the functions below are for testing purposes only
 // TODO: wrap this in a feature? how do features work with wasm?
+// #[cfg_attr(tarpaulin, skip)]
 #[wasm_bindgen]
 pub fn random_ibe_params() -> Result<JsValue, JsError> {
     let ibe_pp: G2 = G2::generator().into();
@@ -123,6 +125,7 @@ pub fn random_ibe_params() -> Result<JsValue, JsError> {
     }).map_err(|_| JsError::new("could not convert ibe test params to JsValue"))
 }
 
+// #[cfg_attr(tarpaulin, skip)]
 #[wasm_bindgen]
 pub fn ibe_extract(x: JsValue, ids_bytes: JsValue) -> Result<JsValue, JsError> {
     let ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(ids_bytes)
@@ -141,4 +144,89 @@ pub fn ibe_extract(x: JsValue, ids_bytes: JsValue) -> Result<JsValue, JsError> {
 
     serde_wasm_bindgen::to_value(&secrets)
         .map_err(|_| JsError::new("could not convert secrets to JsValue"))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use ark_std::test_rng;
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    pub fn wrapper_setup_works() {
+        let x = serde_wasm_bindgen::to_value(&vec![1,2,3,4]).unwrap();
+        let etf = EtfApiWrapper::create(x.clone(), x);
+        let v = etf.version();
+        let version: Vec<u8> = serde_wasm_bindgen::from_value(v).unwrap();
+        assert_eq!(version, b"v0.0.3-dev".to_vec());
+    }
+
+    #[wasm_bindgen_test]
+    pub fn wrapper_can_encrypt() {
+        let message_js = serde_wasm_bindgen::to_value(b"test").unwrap();
+        let slot_ids = vec![vec![1,2,3], vec![2,3,4]];
+        let slot_ids_js = serde_wasm_bindgen::to_value(&slot_ids).unwrap();
+
+        let s = Fr::rand(&mut test_rng());
+        let g = G2::rand(&mut test_rng());
+        let p: G2 = g.mul(s).into();
+        let g_bytes = convert_to_bytes::<G2, 96>(g).to_vec();
+        let p_bytes = convert_to_bytes::<G2, 96>(p).to_vec();
+        let x1 = serde_wasm_bindgen::to_value(&g_bytes).unwrap();
+        let x2 = serde_wasm_bindgen::to_value(&p_bytes).unwrap();
+        let etf = EtfApiWrapper::create(x1, x2);
+        match etf.encrypt(message_js, slot_ids_js, 3) {
+            Ok(ct) => {
+                assert!(!ct.is_null());
+            },
+            Err(_) =>{
+                panic!("test should pass");
+            }
+        }
+    }
+
+    // #[wasm_bindgen_test]
+    // pub fn wrapper_can_decrypt() {
+    //     let message_js = serde_wasm_bindgen::to_value(b"test").unwrap();
+    //     let slot_ids = vec![vec![1, 2, 3], vec![2, 3, 4]];
+    //     let slot_ids_js = serde_wasm_bindgen::to_value(&slot_ids).unwrap();
+
+    //     let s = Fr::rand(&mut test_rng());
+    //     let g = G2::rand(&mut test_rng());
+    //     let p: G2 = g.mul(s).into();
+    //     let g_bytes = convert_to_bytes::<G2, 96>(g).to_vec();
+    //     let p_bytes = convert_to_bytes::<G2, 96>(p).to_vec();
+    //     let x1 = serde_wasm_bindgen::to_value(&g_bytes).unwrap();
+    //     let x2 = serde_wasm_bindgen::to_value(&p_bytes).unwrap();
+    //     let etf = EtfApiWrapper::create(x1, x2);
+    //     match etf.encrypt(message_js, slot_ids_js, 3) {
+    //         Ok(ct) => {
+    //             let t: crypto::client::client::AesIbeCt = serde_wasm_bindgen::from_value(ct).unwrap();
+    //             let ct_bytes = serde_wasm_bindgen::to_value(&t.aes_ct.ciphertext).unwrap();
+    //             let nonce_bytes = serde_wasm_bindgen::to_value(&t.aes_ct.nonce).unwrap();
+    //             let capsule_bytes = serde_wasm_bindgen::to_value(&t.etf_ct).unwrap();
+    //             // calc valid secrets d = sQ
+    //             let secrets: Vec<Vec<u8>> = slot_ids.iter().map(|id| {
+    //                 let q = hash_to_g1(&id);
+    //                 let d = q.mul(s);
+    //                 convert_to_bytes::<G1, 48>(d.into()).to_vec()
+    //             }).collect::<Vec<_>>();
+
+    //             let sks = serde_wasm_bindgen::to_value(&secrets).unwrap();
+
+    //             match etf.decrypt(ct_bytes, nonce_bytes, capsule_bytes, sks) {
+    //                 Ok(m_js) => {
+    //                     let m: Vec<u8> = serde_wasm_bindgen::from_value(m_js).unwrap();
+    //                     assert_eq!(m, b"test".to_vec());
+    //                 }, 
+    //                 Err(_) => {
+    //                     panic!("test should pass, but decryption failed");
+    //                 }
+    //             }
+    //         },
+    //         Err(_) => {
+    //             panic!("test should pass, but encryption failed");
+    //         }
+    //     }
+    // }
 }
