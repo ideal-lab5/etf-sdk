@@ -21,20 +21,13 @@ use std::vec::Vec;
 use std::marker::PhantomData;
 
 #[derive(Serialize, Deserialize, Debug)]
-<<<<<<< HEAD
 // #[derive(Debug)]
-=======
->>>>>>> main
 pub struct AesIbeCt {
     pub aes_ct: AESOutput,
     pub etf_ct: Vec<Vec<u8>>,
 }
 
-<<<<<<< HEAD
 #[derive(Debug, PartialEq)]
-=======
-#[derive(Debug)]
->>>>>>> main
 pub enum ClientError {
     AesEncryptError,
     DeserializationError,
@@ -67,24 +60,15 @@ pub struct DefaultEtfClient<I> {
 /// uses known generator of G2 and other ranomd generator point
 impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
 
-<<<<<<< HEAD
     /// Encrypts a message using AES-GCM, with the secret key having been generated via SSS
     /// Then, encrypt each share for the input ids (assumes sequential)
     /// 
     /// * `ibe_pp`: the public paramter of the BF IBE, in G2
     /// * `p_pub`: ibe_pp * msk
-=======
-    ///
-    /// * `ibe`: a BF IBE
->>>>>>> main
     /// * `message`: The message to encrypt
     /// * `ids`: The ids to encrypt the message for
     /// * `t`: The threshold (when splitting the secret)
     ///
-<<<<<<< HEAD
-=======
-    // TODO: should pass IbePublicParams type instead of the two vecs
->>>>>>> main
     fn encrypt(
         ibe_pp: Vec<u8>,
         p_pub: Vec<u8>,
@@ -98,7 +82,6 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
             .map_err(|_| ClientError::DeserializationError)?;
         let q = G2::deserialize_compressed(&p_pub[..])
             .map_err(|_| ClientError::DeserializationError)?;
-<<<<<<< HEAD
         // if there is only one id, then shares = [msk]
         // and when we loop over the shares and encrypt w/ IBE
         // then we encrypt the msk directly instead
@@ -112,22 +95,6 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         let mut out: Vec<Vec<u8>> = Vec::new(); 
         for (idx, id) in ids.iter().enumerate() {
             let b = convert_to_bytes::<Fr, 32>(shares[idx].1).to_vec();
-=======
-        let (msk, shares) = generate_secrets(ids.len() as u8, t, &mut OsRng);
-        let msk_bytes = convert_to_bytes::<Fr, 32>(msk);
-        let ct_aes = aes_encrypt(message, msk_bytes.try_into().expect("should be 32 bytes;qed"))
-            .map_err(|_| ClientError::AesEncryptError)?;
-        
-
-        let mut out: Vec<Vec<u8>> = Vec::new(); 
-        for (idx, id) in ids.iter().enumerate() {
-            // convert the share to bytes, but loses the index
-            // TODO: consider adding the index here too
-            let s = shares[idx].1;
-            let mut b = Vec::with_capacity(s.compressed_size());
-            s.serialize_compressed(&mut b).unwrap();
-
->>>>>>> main
             let ct = I::encrypt(p.into(), q.into(), &b.try_into().unwrap(), id, OsRng);
             let mut o = Vec::with_capacity(ct.compressed_size());
             // TODO: handle errors
@@ -138,7 +105,6 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
     }
 
     /// decrypt a ct blob 
-<<<<<<< HEAD
     ///
     /// * `ibe_pp`: the public paramter of the BF IBE, in G2
     /// * `ciphertext`: The (AES encrypted) ciphertext to decrypt
@@ -146,9 +112,6 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
     /// * `capsule`: A vec of ciphertexts encrypted with IBE
     /// * `secrets`: an ordered list of secrets, the order should match the order
     ///
-=======
-    /// * `secrets`: an ordered list of secrets, the order should match the order
->>>>>>> main
     /// used when generating the ciphertext
     fn decrypt(
         ibe_pp: Vec<u8>,
@@ -167,10 +130,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
             let sk = G1::deserialize_compressed(&secrets[idx][..])
                 .map_err(|_| ClientError::DeserializationError)?;
             let share_bytes = I::decrypt(p.into(), ct, sk.into());
-<<<<<<< HEAD
             // Q: The error probably should never happen...
-=======
->>>>>>> main
             let share = Fr::deserialize_compressed(&share_bytes[..])
                 .map_err(|_| ClientError::DeserializationError)?;
             dec_secrets.push((Fr::from((idx + 1) as u8), share));
@@ -182,13 +142,8 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
 
         Ok(plaintext)
     }
-<<<<<<< HEAD
 }
 
-=======
-
-}
->>>>>>> main
 
 #[cfg(test)]
 mod test {
@@ -202,26 +157,15 @@ mod test {
     use crate::utils::hash_to_g1;
 
     #[test]
-<<<<<<< HEAD
     pub fn client_can_encrypt_decrypt_with_single_key() {
-=======
-    pub fn client_can_encrypt() {
->>>>>>> main
 
         let message = b"this is a test";
         let ids = vec![
             b"id1".to_vec(), 
-<<<<<<< HEAD
             // b"id2".to_vec(), 
             // b"id3".to_vec(),
         ];
         let t = 1;
-=======
-            b"id2".to_vec(), 
-            b"id3".to_vec(),
-        ];
-        let t = 2;
->>>>>>> main
 
         let ibe_pp: G2 = G2::generator().into();
         let s = Fr::rand(&mut test_rng());
@@ -258,7 +202,6 @@ mod test {
         }
         
     }
-<<<<<<< HEAD
 
     #[test]
     pub fn client_can_encrypt_decrypt_with_many_keys() {
@@ -516,6 +459,4 @@ mod test {
             }
         }
     }
-=======
->>>>>>> main
 }

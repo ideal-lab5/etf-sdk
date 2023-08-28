@@ -29,7 +29,6 @@ impl DleqVerifier for IbeDleqVerifier {
         proof.verify(g, pk, extras)
     }
 
-<<<<<<< HEAD
 }
 
 #[cfg(test)]
@@ -62,6 +61,4 @@ mod test {
         let p = DLEQProof::new(x, g, pk, vec![], rng);
         assert!(IbeDleqVerifier::verify(b"test".to_vec(), p, vec![]).eq(&false));
     }
-=======
->>>>>>> main
 }

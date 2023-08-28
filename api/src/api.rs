@@ -101,26 +101,16 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
 #[cfg(test)]
 pub mod tests {
     use super::*;
-<<<<<<< HEAD
     use ark_std::{test_rng, UniformRand, ops::Mul, rand::Rng};
     use ark_bls12_381::{G1Affine as G1, G2Affine as G2, G1Projective, G2Projective, Fr};
-=======
-    use ark_std::{test_rng, UniformRand, ops::Mul};
-    use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
->>>>>>> main
     use ark_ec::AffineRepr;
     use ark_serialize::CanonicalSerialize;
     use crypto::{
         utils::hash_to_g1,
         client::client::AesIbeCt,
-<<<<<<< HEAD
         ibe::fullident::{IbeCiphertext, Ibe, BfIbe},
         encryption::encryption::AESOutput,
         utils::convert_to_bytes,
-=======
-        ibe::fullident::Ibe,
-        encryption::encryption::AESOutput,
->>>>>>> main
     };
 
 
@@ -137,19 +127,11 @@ pub mod tests {
     // A mock implementation of EtfClient trait for testing
     struct MockEtfClient;
 
-<<<<<<< HEAD
     impl<I: Ibe> EtfClient<I> for MockEtfClient {
         // Implement the required methods for the trait
  
         fn encrypt(
             _p: Vec<u8>, _q: Vec<u8>, _m: &[u8], _ids: Vec<Vec<u8>>, _t: u8,
-=======
-    impl EtfClient for MockEtfClient {
-        // Implement the required methods for the trait
- 
-        fn encrypt(
-            _ibe: BfIbe, _m: &[u8], _ids: Vec<Vec<u8>>, _t: u8,
->>>>>>> main
         ) -> Result<AesIbeCt, crypto::client::client::ClientError> {
             Ok(AesIbeCt {
                 aes_ct: AESOutput {
@@ -161,11 +143,7 @@ pub mod tests {
             })
         }
         fn decrypt(
-<<<<<<< HEAD
             _p: Vec<u8>, 
-=======
-            _ibe: BfIbe, 
->>>>>>> main
             _ct: Vec<u8>, 
             _nonce: Vec<u8>, 
             _capsule: Vec<Vec<u8>>, 
@@ -179,13 +157,8 @@ pub mod tests {
 
     impl Ibe for MockIbe {
         fn encrypt<R: Rng + Sized>(
-<<<<<<< HEAD
             ibe_pp: G2Projective, 
             p_pub: G2Projective,
-=======
-            ibe_pp: G2, 
-            p_pub: G2,
->>>>>>> main
             message: &[u8;32], 
             identity: &[u8], 
             rng: R
@@ -193,11 +166,7 @@ pub mod tests {
             IbeCiphertext{ u: ibe_pp, v: Vec::new(), w: Vec::new() }
         }
     
-<<<<<<< HEAD
         fn decrypt(ibe_pp: G2Projective, ciphertext: IbeCiphertext, sk: G1Projective) -> Vec<u8> {
-=======
-        fn decrypt(ibe_pp: G2, ciphertext: IbeCiphertext, sk: G1) -> Vec<u8> {
->>>>>>> main
             Vec::new()
         }
     }
@@ -224,12 +193,7 @@ pub mod tests {
         let proof = DLEQProof::new(x, g, h, vec![], test_rng());
         assert!(
             DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::verify(
-<<<<<<< HEAD
                 id.to_vec(), proof, vec![]) == true);
-=======
-                id.to_vec(), proof, vec![],
-            ) == true);
->>>>>>> main
     }
 
     #[test]
@@ -244,31 +208,19 @@ pub mod tests {
         let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
-<<<<<<< HEAD
         match DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::
             encrypt(ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(), message, slot_ids, t) {
                 Ok(_) => { },
                 Err(_) => { panic!("the encrypt call should work") },
-=======
-        match DefaultApi::encrypt(ibe_pp_bytes, p_pub_bytes, message, slot_ids, t) {
-            Ok(_) => { },
-            Err(_) => { panic!("the encrypt call should work") },
->>>>>>> main
         }
     }
 
     #[test]
     fn api_decryption_works() {
-<<<<<<< HEAD
         match DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::
             decrypt(vec![], vec![], vec![], vec![vec![1]], vec![]) {
                 Ok(_) => { },
                 Err(_) => { panic!("the decrypt call should work") },
-=======
-        match DefaultApi::decrypt(vec![], vec![], vec![vec![1]], vec![]) {
-            Ok(_) => { },
-            Err(_) => { panic!("the decrypt call should work") },
->>>>>>> main
         }
     }
 }

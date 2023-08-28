@@ -35,11 +35,8 @@ ark-crypto-primitives = { version = "0.4.0", default-features = false, features 
 rand_chacha = { version = "0.3.1", default-features = false }
 serde = { version = "1.0.160", default-features = false, features = ["derive"]}
 
-<<<<<<< HEAD
 [dev-dependencies]
 hex = "0.4.3"
-=======
->>>>>>> main
 
 [features]
 default = ["std"]
