@@ -22,8 +22,11 @@ pub enum ApiError {
     WasmBindError,
 }
 
+<<<<<<< HEAD
 // TODO: enhance error types (using thiserror)
 
+=======
+>>>>>>> main
 /// a wrapper around the DefaultEtfClient so that it can be compiled to wasm
 #[wasm_bindgen]
 pub struct EtfApiWrapper {    
@@ -42,7 +45,11 @@ impl EtfApiWrapper {
 
     #[wasm_bindgen]
     pub fn version(&self) -> JsValue {
+<<<<<<< HEAD
         serde_wasm_bindgen::to_value(b"v0.0.3-dev").unwrap()
+=======
+        serde_wasm_bindgen::to_value(b"v0.0.1").unwrap()
+>>>>>>> main
     }
 
     /// a wrapper function around the DefaultApi 'encrypt' implementation
@@ -93,6 +100,10 @@ impl EtfApiWrapper {
             .map_err(|_| JsError::new("could not decode the capsule"))?;
         let sks: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(sks_bytes)
             .map_err(|_| JsError::new("could not decode the secret keys"))?;
+<<<<<<< HEAD
+=======
+
+>>>>>>> main
         let out = 
             DefaultApi::<IbeDleqVerifier, BfIbe, DefaultEtfClient<BfIbe>>::decrypt(
                 ibe_pp, ct, nonce, capsule, sks)
@@ -109,9 +120,13 @@ pub struct IbeTestParams {
     pub s: Vec<u8>,
 }
 
+<<<<<<< HEAD
 // the functions below are for testing purposes only
 // TODO: wrap this in a feature? how do features work with wasm?
 // #[cfg_attr(tarpaulin, skip)]
+=======
+// TODO: wrap this in a feature? how do features work with wasm?
+>>>>>>> main
 #[wasm_bindgen]
 pub fn random_ibe_params() -> Result<JsValue, JsError> {
     let ibe_pp: G2 = G2::generator().into();
@@ -125,7 +140,10 @@ pub fn random_ibe_params() -> Result<JsValue, JsError> {
     }).map_err(|_| JsError::new("could not convert ibe test params to JsValue"))
 }
 
+<<<<<<< HEAD
 // #[cfg_attr(tarpaulin, skip)]
+=======
+>>>>>>> main
 #[wasm_bindgen]
 pub fn ibe_extract(x: JsValue, ids_bytes: JsValue) -> Result<JsValue, JsError> {
     let ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(ids_bytes)
@@ -144,6 +162,7 @@ pub fn ibe_extract(x: JsValue, ids_bytes: JsValue) -> Result<JsValue, JsError> {
 
     serde_wasm_bindgen::to_value(&secrets)
         .map_err(|_| JsError::new("could not convert secrets to JsValue"))
+<<<<<<< HEAD
 }
 
 #[cfg(test)]
@@ -229,4 +248,6 @@ mod test {
     //         }
     //     }
     // }
+=======
+>>>>>>> main
 }

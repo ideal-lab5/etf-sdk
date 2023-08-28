@@ -1,8 +1,15 @@
 [package]
+<<<<<<< HEAD
 name = "etf-sdk"
 version = "0.0.3-dev"
 edition = "2021"
 license = "GPL-3.0"
+=======
+name = "etf-api"
+version = "0.1.0"
+edition = "2021"
+license = "GPL3"
+>>>>>>> main
 description = "An API for calling etf crypto primitives for encryption and proof verification"
 repository = "https://github.com/ideal-lab5/etf-sdk"
 
@@ -28,6 +35,9 @@ ark-std = { version = "0.4.0", default-features = false }
 getrandom = { version = "0.2", features = ["js"] }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
 ark-ec = { version = "0.4.0", default-features = false }
+<<<<<<< HEAD
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.0"
+=======
+>>>>>>> main

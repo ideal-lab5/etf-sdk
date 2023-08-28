@@ -187,6 +187,7 @@ mod tests {
         let q = DLEQProof::deserialize_compressed(&p_out[..]).unwrap();
         assert_eq!(p, q);
     }
+<<<<<<< HEAD
 
     // #[test]
     // pub fn ntotatest() {
@@ -201,4 +202,6 @@ mod tests {
     //     panic!("{:?}, {:?}", hex::encode(p), hex::encode(q));
         
     // }
+=======
+>>>>>>> main
 }
