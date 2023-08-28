@@ -187,4 +187,18 @@ mod tests {
         let q = DLEQProof::deserialize_compressed(&p_out[..]).unwrap();
         assert_eq!(p, q);
     }
+
+    // #[test]
+    // pub fn ntotatest() {
+    //     let ibe_pp: ark_bls12_381::G2Affine = ark_bls12_381::G2Affine::generator().into();
+    //     let s = Fr::from_be_bytes_mod_order(&[2;32]);
+    //     let p_pub: ark_bls12_381::G2Affine = ibe_pp.mul(s).into();
+
+    //     let p = crate::utils::convert_to_bytes::<ark_bls12_381::G2Affine, 96>(ibe_pp);
+    //     let q = crate::utils::convert_to_bytes::<ark_bls12_381::G2Affine, 96>(p_pub);
+    //     // let r = crate::utils::convert_to_bytes::<ark_bls12_381::Fr, 32>(s);
+
+    //     panic!("{:?}, {:?}", hex::encode(p), hex::encode(q));
+        
+    // }
 }
