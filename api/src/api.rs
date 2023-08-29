@@ -108,7 +108,7 @@ pub mod tests {
     use crypto::{
         utils::hash_to_g1,
         client::client::AesIbeCt,
-        ibe::fullident::{IbeCiphertext, Ibe, BfIbe},
+        ibe::fullident::{IbeCiphertext, Ibe},
         encryption::encryption::AESOutput,
         utils::convert_to_bytes,
     };
@@ -158,15 +158,15 @@ pub mod tests {
     impl Ibe for MockIbe {
         fn encrypt<R: Rng + Sized>(
             ibe_pp: G2Projective, 
-            p_pub: G2Projective,
-            message: &[u8;32], 
-            identity: &[u8], 
-            rng: R
+            _p_pub: G2Projective,
+            _message: &[u8;32], 
+            _identity: &[u8], 
+            _rng: R
         ) -> IbeCiphertext {
             IbeCiphertext{ u: ibe_pp, v: Vec::new(), w: Vec::new() }
         }
     
-        fn decrypt(ibe_pp: G2Projective, ciphertext: IbeCiphertext, sk: G1Projective) -> Vec<u8> {
+        fn decrypt(_ibe_pp: G2Projective, _ciphertext: IbeCiphertext, _sk: G1Projective) -> Vec<u8> {
             Vec::new()
         }
     }
