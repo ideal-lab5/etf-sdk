@@ -7,12 +7,7 @@ use ark_std::{
     ops::Mul,
     rand::Rng,
 };
-
-#[cfg(not(feature = "std"))]
-use ark_std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use alloc::{borrow::ToOwned, vec::Vec};
 
 use crate::utils::{hash_to_g1, h2, h3, h4};
 
@@ -117,7 +112,7 @@ impl Ibe for BfIbe {
 
 // TODO: can do this in place instead
 fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
-    let mut o = a.clone().to_owned();
+    let mut o = a.to_owned();
     for (i, ri) in o.iter_mut().enumerate().take(32) {
         *ri ^= b[i];
     }

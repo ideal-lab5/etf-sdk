@@ -8,23 +8,18 @@ use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use aes_gcm::aead::OsRng;
 use serde::{Deserialize, Serialize};
+use alloc::vec::Vec;
 
-
-#[cfg(not(feature = "std"))]
-use ark_std::vec::Vec;
 #[cfg(not(feature = "std"))]
 use ark_std::marker::PhantomData;
 
 #[cfg(feature = "std")]
-use std::vec::Vec;
-#[cfg(feature = "std")]
 use std::marker::PhantomData;
 
 #[derive(Serialize, Deserialize, Debug)]
-// #[derive(Debug)]
 pub struct AesIbeCt {
     pub aes_ct: AESOutput,
-    pub etf_ct: Vec<Vec<u8>>,
+    pub etf_ct: Vec<Vec<u8>>
 }
 
 #[derive(Debug, PartialEq)]
@@ -92,7 +87,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         let ct_aes = aes_encrypt(message, msk_bytes.try_into().expect("should be 32 bytes;qed"))
             .map_err(|_| ClientError::AesEncryptError)?;
         
-        let mut out: Vec<Vec<u8>> = Vec::new(); 
+        let mut out: Vec<Vec<u8>> = Vec::new();
         for (idx, id) in ids.iter().enumerate() {
             let b = convert_to_bytes::<Fr, 32>(shares[idx].1).to_vec();
             let ct = I::encrypt(p.into(), q.into(), &b.try_into().unwrap(), id, OsRng);

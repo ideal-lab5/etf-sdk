@@ -6,20 +6,11 @@ description = "cryptographic primitives for etf"
 license = "GPL3"
 repository = "https://github.com/ideal-lab5/etf-sdk"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-
-[package.metadata.docs.rs]
-targets = ["x86_64-unknown-linux-gnu"]
-
-[lib]
-crate-type = ["lib"]
-
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = false
+#[package.metadata.docs.rs]
+#targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-aes-gcm = "0.10.2"
+aes-gcm = { version = "0.10.2" }
 array-bytes = "6.1.0"
 generic-array = "0.14.7"
 sha2 = { version = "0.10.2", default-features = false }
@@ -32,15 +23,14 @@ ark-ec = { version = "0.4.0", default-features = false }
 ark-serialize = { version = "0.4.0", default-features = false }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
 ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature"] }
-rand_chacha = { version = "0.3.1", default-features = false }
-serde = { version = "1.0.160", default-features = false, features = ["derive"]}
+# is it ok to use alloc here?
+serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"]}
+getrandom = { version = "0.2", default-features = false, features = ["js"] }
 
 [dev-dependencies]
 hex = "0.4.3"
+rand_chacha = "0.3.1"
 
 [features]
 default = ["std"]
-std = [
-    "serde/std",
-    #"ark-serialize/std",
-]
+std = []

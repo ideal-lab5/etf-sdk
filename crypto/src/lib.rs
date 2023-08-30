@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std, no_main)]
 #![warn(
     unused,
     future_incompatible,
@@ -7,7 +7,11 @@
     rust_2021_compatibility
 )]
 #![allow(clippy::op_ref, clippy::suspicious_op_assign_impl)]
-// #![deny(unsafe_code)]
+#![deny(unsafe_code)]
+
+#[macro_use]
+extern crate alloc;
+
 pub mod utils;
 pub mod encryption;
 pub mod ibe;

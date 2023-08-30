@@ -6,11 +6,7 @@ use sha3::digest::{Update, ExtendableOutput, XofReader};
 use ark_bls12_381::Fr;
 use ark_std::rand::Rng;
 
-#[cfg(not(feature = "std"))]
-use ark_std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use alloc::vec::Vec;
 
 /// the type of the G1 group
 type K = ark_bls12_381::G1Affine;

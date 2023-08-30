@@ -10,17 +10,16 @@ use ark_poly::{
     DenseUVPolynomial, Polynomial,
 };
 use serde::{Deserialize, Serialize};
+use alloc::vec::Vec;
 
-#[cfg(not(feature = "std"))]
-use ark_std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-#[derive(Debug, Serialize, Deserialize)]
+/// The output of AES Encryption plus the ephemeral secret key
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AESOutput {
+    /// the AES ciphertext
     pub ciphertext: Vec<u8>,
+    /// the AES nonce
     pub nonce: Vec<u8>,
+    /// the master secret key
     pub key: Vec<u8>,
 }
 

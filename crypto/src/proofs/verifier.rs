@@ -1,13 +1,10 @@
 use crate::proofs::dleq::DLEQProof;
 use crate::utils::{hash_to_g1};
 use ark_ec::AffineRepr;
+use alloc::vec::Vec;
 
-#[cfg(not(feature = "std"))]
-use ark_std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
+/// verify a DLEQ proof
+/// TODO: do I really need this?
 pub trait DleqVerifier {
     fn verify(id: Vec<u8>, proof: DLEQProof, extras: Vec<u8>) -> bool;
 }
