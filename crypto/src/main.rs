@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std, no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![warn(
     unused,
     future_incompatible,
@@ -17,3 +17,5 @@ pub mod encryption;
 pub mod ibe;
 pub mod proofs;
 pub mod client;
+
+fn main() { }
