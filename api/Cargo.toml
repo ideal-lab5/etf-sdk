@@ -1,6 +1,6 @@
 [package]
 name = "etf-sdk"
-version = "0.0.3-dev"
+version = "0.0.4-dev"
 edition = "2021"
 license = "GPL-3.0"
 description = "An API for calling etf crypto primitives for encryption and proof verification"
@@ -19,7 +19,7 @@ crate-type = [
 wasm-opt = false
 
 [dependencies]
-crypto = { path = "../crypto", default-features = false }
+crypto = { path = "../crypto" }
 serde-wasm-bindgen = { version = "0.4", default-features = false}
 wasm-bindgen = { version = "0.2", default-features = false}
 serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"]}
@@ -28,6 +28,7 @@ ark-std = { version = "0.4.0", default-features = false }
 getrandom = { version = "0.2", features = ["js"] }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
 ark-ec = { version = "0.4.0", default-features = false }
+rand_chacha = { version = "0.3.1", default-features = false }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.0"

@@ -22,7 +22,7 @@ pub enum ApiError {
     WasmBindError,
 }
 
-// TODO: enhance error types (using thiserror)
+// TODO: enhance error types (using thiserror?)
 
 /// a wrapper around the DefaultEtfClient so that it can be compiled to wasm
 #[wasm_bindgen]
@@ -55,6 +55,7 @@ impl EtfApiWrapper {
         message_bytes: JsValue, // &[u8], 
         slot_id_bytes: JsValue, // Vec<Vec<u8>>,
         t: u8,
+        seed_bytes: JsValue,
     ) -> Result<JsValue, JsError> {
         // convert JsValue to types
         let ibe_pp : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.0.clone())
@@ -65,10 +66,12 @@ impl EtfApiWrapper {
             .map_err(|_| JsError::new("could not decode message"))?;
         let slot_ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(slot_id_bytes)
             .map_err(|_| JsError::new("could not decode slot ids"))?;
+        let seed: Vec<u8> = serde_wasm_bindgen::from_value(seed_bytes)
+            .map_err(|_| JsError::new("could not decode seed"))?;
         // TODO: this should probably be an async future... in the future
         let out = 
             DefaultApi::<IbeDleqVerifier, BfIbe, DefaultEtfClient<BfIbe>>::encrypt(
-                ibe_pp, p_pub, &message, slot_ids, t)
+                ibe_pp, p_pub, &message, slot_ids, t, &seed)
                     .map_err(|_| JsError::new("encrypt failed"))?;
         serde_wasm_bindgen::to_value(&out)
             .map_err(|_| JsError::new("could not convert to JsValue"))
@@ -166,6 +169,7 @@ mod test {
         let message_js = serde_wasm_bindgen::to_value(b"test").unwrap();
         let slot_ids = vec![vec![1,2,3], vec![2,3,4]];
         let slot_ids_js = serde_wasm_bindgen::to_value(&slot_ids).unwrap();
+        let seed_js = serde_wasm_bindgen::to_value(b"seed").unwrap();
 
         let s = Fr::rand(&mut test_rng());
         let g = G2::rand(&mut test_rng());
@@ -175,7 +179,7 @@ mod test {
         let x1 = serde_wasm_bindgen::to_value(&g_bytes).unwrap();
         let x2 = serde_wasm_bindgen::to_value(&p_bytes).unwrap();
         let etf = EtfApiWrapper::create(x1, x2);
-        match etf.encrypt(message_js, slot_ids_js, 3) {
+        match etf.encrypt(message_js, slot_ids_js, 3, seed_js) {
             Ok(ct) => {
                 assert!(!ct.is_null());
             },
