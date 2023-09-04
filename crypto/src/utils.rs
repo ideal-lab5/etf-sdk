@@ -5,10 +5,15 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_bls12_381::{Fr, G1Affine};
 
-use alloc::vec::Vec;
+// use alloc::vec::Vec;
+// #![cfg(not(feature = "std"))]
+use ark_std::vec::Vec;
+
+// #![cfg(feature = "std")]
+// use std::vec::Vec;
 
 /// sha256 hasher
-fn sha256(b: &[u8]) -> Vec<u8> {
+pub fn sha256(b: &[u8]) -> Vec<u8> {
     let mut hasher = sha2::Sha256::new();
     hasher.update(b);
     hasher.finalize().to_vec()

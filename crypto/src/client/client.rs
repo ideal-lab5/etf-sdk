@@ -6,15 +6,14 @@ use crate::{
 };
 use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use aes_gcm::aead::OsRng;
+// use aes_gcm::aead::OsRng;
 use serde::{Deserialize, Serialize};
-use alloc::vec::Vec;
 
-#[cfg(not(feature = "std"))]
-use ark_std::marker::PhantomData;
-
-#[cfg(feature = "std")]
-use std::marker::PhantomData;
+use ark_std::{
+    marker::PhantomData,
+    vec::Vec,
+    rand::{CryptoRng, Rng},
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AesIbeCt {
@@ -30,12 +29,14 @@ pub enum ClientError {
 }
 
 pub trait EtfClient<I: Ibe> {
-    fn encrypt(
+    
+    fn encrypt<R: Rng + CryptoRng + Sized>(
         ibe_pp: Vec<u8>,
         p_pub: Vec<u8>,
         message: &[u8],
         ids: Vec<Vec<u8>>,
         t: u8,
+        mut rng: R, // the mutability here is actually an warning - fix this soon
     ) -> Result<AesIbeCt, ClientError>; 
 
     fn decrypt(
@@ -64,12 +65,13 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
     /// * `ids`: The ids to encrypt the message for
     /// * `t`: The threshold (when splitting the secret)
     ///
-    fn encrypt(
+    fn encrypt<R: Rng + CryptoRng + Sized>(
         ibe_pp: Vec<u8>,
         p_pub: Vec<u8>,
         message: &[u8],
         ids: Vec<Vec<u8>>,
         t: u8,
+        mut rng: R,
     ) -> Result<AesIbeCt, ClientError> {
         // todo: verify: t < |ids|
         // todo: verify public params, error handling
@@ -80,17 +82,17 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         // if there is only one id, then shares = [msk]
         // and when we loop over the shares and encrypt w/ IBE
         // then we encrypt the msk directly instead
-        let (msk, shares) = generate_secrets(ids.len() as u8, t, &mut OsRng);
+        let (msk, shares) = generate_secrets(ids.len() as u8, t, &mut rng);
         let msk_bytes = convert_to_bytes::<Fr, 32>(msk);
         // Q: will this error ever occur?
         // not sure how to test for it
-        let ct_aes = aes_encrypt(message, msk_bytes.try_into().expect("should be 32 bytes;qed"))
+        let ct_aes = aes_encrypt(message, msk_bytes.try_into().expect("should be 32 bytes;qed"), &mut rng)
             .map_err(|_| ClientError::AesEncryptError)?;
         
         let mut out: Vec<Vec<u8>> = Vec::new();
         for (idx, id) in ids.iter().enumerate() {
             let b = convert_to_bytes::<Fr, 32>(shares[idx].1).to_vec();
-            let ct = I::encrypt(p.into(), q.into(), &b.try_into().unwrap(), id, OsRng);
+            let ct = I::encrypt(p.into(), q.into(), &b.try_into().unwrap(), id, &mut rng);
             let mut o = Vec::with_capacity(ct.compressed_size());
             // TODO: handle errors
             ct.serialize_compressed(&mut o).unwrap();
@@ -144,6 +146,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
 mod test {
 
     use super::*;
+    use ark_std::{UniformRand, rand::RngCore};
     use ark_bls12_381::{Fr, G2Projective as G2};
     use ark_ff::UniformRand;
     use ark_ec::Group;
@@ -157,8 +160,6 @@ mod test {
         let message = b"this is a test";
         let ids = vec![
             b"id1".to_vec(), 
-            // b"id2".to_vec(), 
-            // b"id3".to_vec(),
         ];
         let t = 1;
 
@@ -171,7 +172,7 @@ mod test {
 
         match DefaultEtfClient::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
-            message, ids.clone(), t,
+            message, ids.clone(), t, test_rng()
         ) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
@@ -218,7 +219,7 @@ mod test {
 
         match DefaultEtfClient::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
-            message, ids.clone(), t,
+            message, ids.clone(), t, test_rng()
         ) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
@@ -254,7 +255,7 @@ mod test {
         match DefaultEtfClient::<BfIbe>::encrypt(
             vec![],
             p_pub_bytes.to_vec(),
-            b"test", vec![], 2,
+            b"test", vec![], 2, test_rng()
         ) {
             Ok(ct) => {
                panic!("should be an error");

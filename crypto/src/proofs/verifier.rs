@@ -1,7 +1,12 @@
 use crate::proofs::dleq::DLEQProof;
 use crate::utils::{hash_to_g1};
 use ark_ec::AffineRepr;
-use alloc::vec::Vec;
+
+// #![cfg(not(feature = "std"))]
+use ark_std::vec::Vec;
+
+// #![cfg(feature = "std")]
+// use std::vec::Vec;
 
 /// verify a DLEQ proof
 /// TODO: do I really need this?
@@ -32,30 +37,25 @@ impl DleqVerifier for IbeDleqVerifier {
 mod test {
     use super::*;
     use ark_bls12_381::{Fr, G1Affine};
-    use rand_chacha::{
-        ChaCha20Rng,
-        rand_core::SeedableRng,
-    };
+    use ark_std::test_rng;
     use ark_ff::UniformRand;
     use ark_ec::AffineRepr;
 
     #[test]
     pub fn can_verify_proof_is_valid() {
-        let mut rng = ChaCha20Rng::seed_from_u64(0u64);
-        let x = Fr::rand(&mut rng);
+        let x = Fr::rand(&mut test_rng());
         let g = G1Affine::generator();
         let pk = hash_to_g1(b"test");
-        let p = DLEQProof::new(x, g, pk, vec![], rng);
+        let p = DLEQProof::new(x, g, pk, vec![], test_rng());
         assert!(IbeDleqVerifier::verify(b"test".to_vec(), p, vec![]).eq(&true));
     }
 
     #[test]
     pub fn can_verify_proof_is_not_valid() {
-        let mut rng = ChaCha20Rng::seed_from_u64(0u64);
-        let x = Fr::rand(&mut rng);
+        let x = Fr::rand(&mut test_rng());
         let g = G1Affine::generator();
         let pk = G1Affine::generator();
-        let p = DLEQProof::new(x, g, pk, vec![], rng);
+        let p = DLEQProof::new(x, g, pk, vec![], test_rng());
         assert!(IbeDleqVerifier::verify(b"test".to_vec(), p, vec![]).eq(&false));
     }
 }

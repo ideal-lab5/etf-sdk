@@ -6,7 +6,13 @@ use sha3::digest::{Update, ExtendableOutput, XofReader};
 use ark_bls12_381::Fr;
 use ark_std::rand::Rng;
 
-use alloc::vec::Vec;
+// use alloc::vec::Vec;
+
+// #![cfg(not(feature = "std"))]
+use ark_std::vec::Vec;
+
+// #![cfg(feature = "std")]
+// use std::vec::Vec;
 
 /// the type of the G1 group
 type K = ark_bls12_381::G1Affine;
@@ -133,19 +139,15 @@ fn prepare_witness(points: Vec<K>, extras: &[u8]) -> Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand_chacha::{
-        ChaCha20Rng,
-        rand_core::SeedableRng,
-    };
+    use ark_std::test_rng;
 
     use ark_ec::AffineRepr;
 
     fn setup(extras: Vec<u8>) -> (K, K, DLEQProof) {
-        let mut rng = ChaCha20Rng::seed_from_u64(0u64);
-        let x = Fr::rand(&mut rng);
+        let x = Fr::rand(&mut test_rng());
         let g = K::generator();
-        let h = K::rand(&mut rng);
-        (g, h, DLEQProof::new(x, g, h, extras, rng))
+        let h = K::rand(&mut test_rng());
+        (g, h, DLEQProof::new(x, g, h, extras, test_rng()))
     }
 
     #[test]

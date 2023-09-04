@@ -1,5 +1,5 @@
 use aes_gcm::{
-    aead::{Aead, AeadCore, AeadInPlace, KeyInit, OsRng},
+    aead::{Aead, AeadCore, AeadInPlace, KeyInit},
     Aes256Gcm, Nonce, // Or `Aes128Gcm`
 };
 use ark_std::rand::Rng;
@@ -10,8 +10,10 @@ use ark_poly::{
     DenseUVPolynomial, Polynomial,
 };
 use serde::{Deserialize, Serialize};
-use alloc::vec::Vec;
+// use alloc::vec::Vec;
 
+use ark_std::rand::CryptoRng;
+use ark_std::vec::Vec;
 /// The output of AES Encryption plus the ephemeral secret key
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AESOutput {
@@ -19,7 +21,6 @@ pub struct AESOutput {
     pub ciphertext: Vec<u8>,
     /// the AES nonce
     pub nonce: Vec<u8>,
-    /// the master secret key
     pub key: Vec<u8>,
 }
 
@@ -35,9 +36,9 @@ pub enum Error {
 ///
 /// * `message`: The message to encrypt
 ///
-pub fn aes_encrypt(message: &[u8], key: [u8;32]) -> Result<AESOutput, Error> {
+pub fn aes_encrypt<R: Rng + CryptoRng + Sized>(message: &[u8], key: [u8;32], mut rng: R) -> Result<AESOutput, Error> {
     let cipher = Aes256Gcm::new(generic_array::GenericArray::from_slice(&key));
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
+    let nonce = Aes256Gcm::generate_nonce(&mut rng); // 96-bits; unique per message
 
     let mut buffer: Vec<u8> = Vec::new(); // Note: buffer needs 16-bytes overhead for auth tag
     buffer.extend_from_slice(message);

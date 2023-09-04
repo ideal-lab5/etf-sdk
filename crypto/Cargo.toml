@@ -14,12 +14,10 @@ targets = ["x86_64-unknown-linux-gnu"]
 #crate-type = ["lib"]
 #path = "src/lib.rs"
 
-#[[bin]]
-#name = "main"
-#doc = false
-
 [dependencies]
-aes-gcm = { version = "0.10.2" }
+# is it ok to use alloc here?
+serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"] }
+aes-gcm = { version = "0.10.2", default-features = false, features = ["alloc", "aes", "rand_core"] }
 array-bytes = "6.1.0"
 generic-array = "0.14.7"
 sha2 = { version = "0.10.2", default-features = false }
@@ -32,16 +30,7 @@ ark-ec = { version = "0.4.0", default-features = false }
 ark-serialize = { version = "0.4.0", default-features = false }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
 ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature"] }
-# is it ok to use alloc here?
-serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"], optional = true}
-getrandom = { version = "0.2", default-features = false, features = ["js"] }
+#getrandom = { version = "0.2", default-features = false, features = ["js"] }
 
 [dev-dependencies]
 hex = "0.4.3"
-rand_chacha = "0.3.1"
-
-[features]
-default = []
-std = [
-    "serde",
-]

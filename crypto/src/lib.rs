@@ -1,4 +1,6 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+//#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
+
 #![warn(
     unused,
     future_incompatible,
@@ -18,4 +20,5 @@ pub mod ibe;
 pub mod proofs;
 pub mod client;
 
-fn main() { }
+// #[cfg(test)]
+pub mod testing;

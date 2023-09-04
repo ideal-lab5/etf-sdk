@@ -6,9 +6,9 @@ use ark_ec::pairing::Pairing;
 use ark_std::{
     ops::Mul,
     rand::Rng,
+    borrow::ToOwned,
 };
-use alloc::{borrow::ToOwned, vec::Vec};
-
+use ark_std::vec::Vec;
 use crate::utils::{hash_to_g1, h2, h3, h4};
 
 /// a ciphertext (U, V, W)
@@ -122,12 +122,8 @@ fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand_chacha::{
-        ChaCha20Rng,
-        rand_core::SeedableRng,
-    };
     use ark_bls12_381::Fr;
-    use ark_std::{UniformRand, rand::RngCore};
+    use ark_std::{test_rng, UniformRand, rand::RngCore};
 
     #[test]
     pub fn can_encrypt_and_decrypt() {
@@ -135,10 +131,9 @@ mod test {
         let id_string = b"example@test.com";
         // a dummy message
         let message: [u8;32] = [2;32];
-        let mut rng = ChaCha20Rng::seed_from_u64(23u64);
         // every participant knows the msk...
         // could be replaced by an MPC protocol
-        let msk = Fr::from(rng.next_u64());
+        let msk = Fr::from(test_rng().next_u64());
         // a random element of G1, the IBE public parameter
         let ibe_pp = G2::rand(&mut rng);
         let p_pub = ibe_pp.mul(msk);
