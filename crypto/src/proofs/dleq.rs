@@ -71,7 +71,6 @@ fn prepare_proof<R: Rng + Sized>(
     extras: Vec<u8>, 
     mut rng: R,
 ) -> DLEQProof {
-    // let mut rng = ChaCha20Rng::from_seed(seed);
     let r: Fr = Fr::rand(&mut rng);
     let rand_commitment_g: K = g.mul(r).into();
     let rand_commitment_h: K = h.mul(r).into();
