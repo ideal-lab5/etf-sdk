@@ -25,6 +25,9 @@ pub struct AesIbeCt {
 pub enum ClientError {
     AesEncryptError,
     DeserializationError,
+    DeserializationErrorG1,
+    DeserializationErrorG2,
+    DeserializationErrorFr,
     DecryptionError,
 }
 
@@ -119,17 +122,17 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
     ) -> Result<Vec<u8>, ClientError> {
         let mut dec_secrets: Vec<(Fr, Fr)> = Vec::new();
         let p = G2::deserialize_compressed(&ibe_pp[..])
-            .map_err(|_| ClientError::DeserializationError)?;
+            .map_err(|_| ClientError::DeserializationErrorG2)?;
         for (idx, e) in capsule.iter().enumerate() {
             // convert bytes to Fr
             let ct = IbeCiphertext::deserialize_compressed(&e[..])
                 .map_err(|_| ClientError::DeserializationError)?;
             let sk = G1::deserialize_compressed(&secrets[idx][..])
-                .map_err(|_| ClientError::DeserializationError)?;
+                .map_err(|_| ClientError::DeserializationErrorG1)?;
             let share_bytes = I::decrypt(p.into(), ct, sk.into());
             // Q: The error probably should never happen...
             let share = Fr::deserialize_compressed(&share_bytes[..])
-                .map_err(|_| ClientError::DeserializationError)?;
+                .map_err(|_| ClientError::DeserializationErrorFr)?;
             dec_secrets.push((Fr::from((idx + 1) as u8), share));
         }
         let secret_scalar = interpolate(dec_secrets);
