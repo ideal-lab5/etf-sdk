@@ -7,7 +7,7 @@ license = "GPL3"
 repository = "https://github.com/ideal-lab5/etf-sdk"
 authors = ["Tony Riemer <driemworks@idealabs.network>"]
 rust-version = "1.63"
-homepage = "idealabs.network"
+homepage = "https://idealabs.network"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
