@@ -121,12 +121,14 @@ pub fn interpolate(evaluations: Vec<(Fr, Fr)>) -> Fr {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ark_std::test_rng;
+    use rand_chacha::ChaCha20Rng;
+    use ark_std::rand::SeedableRng;
 
     #[test]
     pub fn aes_encrypt_decrypt_works() {
         let msg = b"test";
-        match aes_encrypt(msg, [2;32]) {
+        let rng = ChaCha20Rng::from_seed([2;32]);
+        match aes_encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
                 match aes_decrypt(aes_out.ciphertext, &aes_out.nonce, &aes_out.key) {
                     Ok(plaintext) => {
@@ -146,10 +148,11 @@ mod test {
     #[test]
     pub fn aes_encrypt_decrypt_fails_with_bad_key() {
         let msg = b"test";
-        match aes_encrypt(msg, [2;32]) {
+        let rng = ChaCha20Rng::from_seed([1;32]);
+        match aes_encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
                 match aes_decrypt(aes_out.ciphertext, &aes_out.nonce, &b"hi".to_vec()) {
-                    Ok(plaintext) => {
+                    Ok(_) => {
                         panic!("should be an error");
                     }, 
                     Err(e) => {
@@ -166,7 +169,8 @@ mod test {
     #[test]
     pub fn aes_encrypt_decrypt_fails_with_bad_nonce() {
         let msg = b"test";
-        match aes_encrypt(msg, [2;32]) {
+        let rng = ChaCha20Rng::from_seed([3;32]);
+        match aes_encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
                 match aes_decrypt(aes_out.ciphertext, &vec![0,0,0,0,0,0,0,0,0,0,0,0], &aes_out.key) {
                     Ok(_) => {
@@ -187,7 +191,8 @@ mod test {
     fn secrets_interpolation() {
         let n = 5; // Number of participants
         let t = 3; // Threshold
-        let (msk, shares) = generate_secrets(n, t, &mut test_rng());
+        let rng = ChaCha20Rng::from_seed([4;32]);
+        let (msk, shares) = generate_secrets(n, t, rng);
         // Perform Lagrange interpolation
         let interpolated_msk = interpolate(shares);
         // Check if the msk and the interpolated msk match

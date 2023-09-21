@@ -77,7 +77,6 @@ pub fn convert_to_bytes<E: CanonicalSerialize, const N: usize>(k: E) -> [u8;N] {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     
     #[test]
     fn utils_can_calc_sha256() {

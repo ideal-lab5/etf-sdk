@@ -3,7 +3,7 @@ use ark_serialize::CanonicalDeserialize;
 use ark_std::{test_rng, UniformRand, ops::Mul};
 use ark_bls12_381::{Fr, G1Affine as G1, G2Affine as G2};
 use ark_ec::AffineRepr;
-use crypto::{
+use etf_crypto_primitives::{
     ibe::fullident::BfIbe,
     proofs::verifier::IbeDleqVerifier,
     client::client::DefaultEtfClient,

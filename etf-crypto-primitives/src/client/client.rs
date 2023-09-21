@@ -39,7 +39,7 @@ pub trait EtfClient<I: Ibe> {
         message: &[u8],
         ids: Vec<Vec<u8>>,
         t: u8,
-        mut rng: R, // the mutability here is actually an warning - fix this soon
+        rng: R,
     ) -> Result<AesIbeCt, ClientError>; 
 
     fn decrypt(
@@ -149,17 +149,21 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
 mod test {
 
     use super::*;
-    use ark_std::{UniformRand, rand::RngCore};
+    use ark_std::{
+        rand::SeedableRng, 
+        test_rng, 
+        ops::Mul,
+    };
     use ark_bls12_381::{Fr, G2Projective as G2};
     use ark_ff::UniformRand;
     use ark_ec::Group;
-    use ark_std::{test_rng, ops::Mul};
+    use rand_chacha::ChaCha20Rng;
     use crate::ibe::fullident::BfIbe;
     use crate::utils::hash_to_g1;
 
     #[test]
     pub fn client_can_encrypt_decrypt_with_single_key() {
-
+        let rng = ChaCha20Rng::from_seed([4;32]);
         let message = b"this is a test";
         let ids = vec![
             b"id1".to_vec(), 
@@ -175,7 +179,7 @@ mod test {
 
         match DefaultEtfClient::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
-            message, ids.clone(), t, test_rng()
+            message, ids.clone(), t, rng,
         ) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
@@ -204,7 +208,7 @@ mod test {
 
     #[test]
     pub fn client_can_encrypt_decrypt_with_many_keys() {
-
+        let rng = ChaCha20Rng::from_seed([4;32]);
         let message = b"this is a test";
         let ids = vec![
             b"id1".to_vec(), 
@@ -222,7 +226,7 @@ mod test {
 
         match DefaultEtfClient::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
-            message, ids.clone(), t, test_rng()
+            message, ids.clone(), t, rng
         ) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
@@ -250,7 +254,7 @@ mod test {
 
     #[test]
     pub fn client_encrypt_fails_with_bad_encoding() {
-
+        let rng = ChaCha20Rng::from_seed([4;32]);
         let ibe_pp: G2 = G2::generator();
         let p_pub_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
 
@@ -258,9 +262,9 @@ mod test {
         match DefaultEtfClient::<BfIbe>::encrypt(
             vec![],
             p_pub_bytes.to_vec(),
-            b"test", vec![], 2, test_rng()
+            b"test", vec![], 2, rng.clone()
         ) {
-            Ok(ct) => {
+            Ok(_) => {
                panic!("should be an error");
             },
             Err(e) => {
@@ -272,9 +276,9 @@ mod test {
         match DefaultEtfClient::<BfIbe>::encrypt(
             p_pub_bytes.to_vec(),
             vec![],
-            b"test", vec![], 2,
+            b"test", vec![], 2, rng,
         ) {
-            Ok(ct) => {
+            Ok(_) => {
                panic!("should be an error");
             },
             Err(e) => {
@@ -285,10 +289,6 @@ mod test {
 
     #[test]
     pub fn client_decrypt_fails_with_bad_encoding_p() {
-
-        let ibe_pp: G2 = G2::generator();
-        let p_pub_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
-
         // bad 'p'
         match DefaultEtfClient::<BfIbe>::decrypt(
             vec![], vec![], vec![], vec![], vec![], 
@@ -297,7 +297,7 @@ mod test {
                 panic!("should be an error");
             }, 
             Err(e) => {
-                assert_eq!(e, ClientError::DeserializationError);
+                assert_eq!(e, ClientError::DeserializationErrorG2);
             }
         }  
     }
@@ -330,6 +330,8 @@ mod test {
         ];
         let t = 2;
 
+        let rng = ChaCha20Rng::from_seed([4;32]);
+
         let ibe_pp: G2 = G2::generator().into();
         let s = Fr::rand(&mut test_rng());
         let p_pub: G2 = ibe_pp.mul(s).into();
@@ -339,7 +341,7 @@ mod test {
 
         match DefaultEtfClient::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
-            message, ids.clone(), t,
+            message, ids.clone(), t, rng,
         ) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
@@ -376,7 +378,7 @@ mod test {
             b"id3".to_vec(),
         ];
         let t = 2;
-
+        let rng = ChaCha20Rng::from_seed([4;32]);
         let ibe_pp: G2 = G2::generator().into();
         let s = Fr::rand(&mut test_rng());
         let p_pub: G2 = ibe_pp.mul(s).into();
@@ -386,7 +388,7 @@ mod test {
 
         match DefaultEtfClient::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
-            message, ids.clone(), t,
+            message, ids.clone(), t, rng,
         ) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
@@ -422,7 +424,7 @@ mod test {
             b"id3".to_vec(),
         ];
         let t = 2;
-
+        let rng = ChaCha20Rng::from_seed([4;32]);
         let ibe_pp: G2 = G2::generator().into();
         let s = Fr::rand(&mut test_rng());
         let p_pub: G2 = ibe_pp.mul(s).into();
@@ -431,8 +433,12 @@ mod test {
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
         match DefaultEtfClient::<BfIbe>::encrypt(
-            ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
-            message, ids.clone(), t,
+            ibe_pp_bytes.to_vec(), 
+            p_pub_bytes.to_vec(),
+            message, 
+            ids.clone(), 
+            t,
+            rng,
         ) {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ

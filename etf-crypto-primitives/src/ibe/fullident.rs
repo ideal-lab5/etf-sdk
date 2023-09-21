@@ -135,10 +135,10 @@ mod test {
         // could be replaced by an MPC protocol
         let msk = Fr::from(test_rng().next_u64());
         // a random element of G1, the IBE public parameter
-        let ibe_pp = G2::rand(&mut rng);
+        let ibe_pp = G2::rand(&mut test_rng());
         let p_pub = ibe_pp.mul(msk);
 
-        let ct = BfIbe::encrypt(ibe_pp, p_pub, &message, id_string, &mut rng);
+        let ct = BfIbe::encrypt(ibe_pp, p_pub, &message, id_string, &mut test_rng());
         // then calculate our own secret
         let d = hash_to_g1(id_string).mul(msk);
 

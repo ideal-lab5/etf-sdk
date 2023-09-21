@@ -1,4 +1,4 @@
-use crypto::{
+use etf_crypto_primitives::{
     proofs::{dleq::DLEQProof, verifier::DleqVerifier},
     ibe::fullident::Ibe,
     client::client::{EtfClient, AesIbeCt},
@@ -85,7 +85,8 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
         t: u8,
         seed: &[u8],
     ) -> Result<AesIbeCt, Error> {
-        let seed_hash = crypto::utils::sha256(&crypto::utils::sha256(seed));
+        let seed_hash = etf_crypto_primitives::utils::sha256
+            (&etf_crypto_primitives::utils::sha256(seed));
         let rng = ChaCha20Rng::from_seed(seed_hash.try_into().expect("should be 32 bytes; qed"));
         let res = E::encrypt(ibe_pp_bytes, p_pub_bytes, message, slot_ids, t, rng)
             .map_err(|_| Error::EncryptionError)?;
@@ -112,9 +113,9 @@ pub mod tests {
     use ark_bls12_381::{G1Affine as G1, G2Affine as G2, G1Projective, G2Projective, Fr};
     use ark_ec::AffineRepr;
     use ark_serialize::CanonicalSerialize;
-    use crypto::{
+    use etf_crypto_primitives::{
         utils::hash_to_g1,
-        client::client::AesIbeCt,
+        client::client::{AesIbeCt, ClientError},
         ibe::fullident::{IbeCiphertext, Ibe},
         encryption::encryption::AESOutput,
         utils::convert_to_bytes,
@@ -139,7 +140,7 @@ pub mod tests {
  
         fn encrypt<R: Rng + CryptoRng + Sized>(
             _p: Vec<u8>, _q: Vec<u8>, _m: &[u8], _ids: Vec<Vec<u8>>, _t: u8, _rng: R,
-        ) -> Result<AesIbeCt, crypto::client::client::ClientError> {
+        ) -> Result<AesIbeCt, ClientError> {
             Ok(AesIbeCt {
                 aes_ct: AESOutput {
                     ciphertext: vec![1, 2, 3],
@@ -155,7 +156,7 @@ pub mod tests {
             _nonce: Vec<u8>, 
             _capsule: Vec<Vec<u8>>, 
             _secrets: Vec<Vec<u8>>
-        ) -> Result<Vec<u8>, crypto::client::client::ClientError> {
+        ) -> Result<Vec<u8>, ClientError> {
             Ok(vec![5, 6, 7])
         }
     }
