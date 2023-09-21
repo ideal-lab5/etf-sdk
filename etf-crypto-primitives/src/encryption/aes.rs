@@ -36,7 +36,7 @@ pub enum Error {
 ///
 /// * `message`: The message to encrypt
 ///
-pub fn aes_encrypt<R: Rng + CryptoRng + Sized>(message: &[u8], key: [u8;32], mut rng: R) -> Result<AESOutput, Error> {
+pub fn encrypt<R: Rng + CryptoRng + Sized>(message: &[u8], key: [u8;32], mut rng: R) -> Result<AESOutput, Error> {
     let cipher = Aes256Gcm::new(generic_array::GenericArray::from_slice(&key));
     let nonce = Aes256Gcm::generate_nonce(&mut rng); // 96-bits; unique per message
 
@@ -53,12 +53,12 @@ pub fn aes_encrypt<R: Rng + CryptoRng + Sized>(message: &[u8], key: [u8;32], mut
     })
 }
 
-pub fn aes_decrypt(ciphertext: Vec<u8>, nonce_slice: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn decrypt(ciphertext: Vec<u8>, nonce_slice: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     // not sure about that...
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| Error::InvalidKey)?;
     let nonce = Nonce::from_slice(nonce_slice);
-    let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref())
+    let plaintext = cipher.decrypt(nonce, ciphertext.as_ref())
         .map_err(|_| Error::DecryptionError)?;
     Ok(plaintext)
 }
@@ -128,9 +128,9 @@ mod test {
     pub fn aes_encrypt_decrypt_works() {
         let msg = b"test";
         let rng = ChaCha20Rng::from_seed([2;32]);
-        match aes_encrypt(msg, [2;32], rng) {
+        match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match aes_decrypt(aes_out.ciphertext, &aes_out.nonce, &aes_out.key) {
+                match decrypt(aes_out.ciphertext, &aes_out.nonce, &aes_out.key) {
                     Ok(plaintext) => {
                         assert_eq!(msg.to_vec(), plaintext);
                     }, 
@@ -149,9 +149,9 @@ mod test {
     pub fn aes_encrypt_decrypt_fails_with_bad_key() {
         let msg = b"test";
         let rng = ChaCha20Rng::from_seed([1;32]);
-        match aes_encrypt(msg, [2;32], rng) {
+        match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match aes_decrypt(aes_out.ciphertext, &aes_out.nonce, &b"hi".to_vec()) {
+                match decrypt(aes_out.ciphertext, &aes_out.nonce, &b"hi".to_vec()) {
                     Ok(_) => {
                         panic!("should be an error");
                     }, 
@@ -170,9 +170,9 @@ mod test {
     pub fn aes_encrypt_decrypt_fails_with_bad_nonce() {
         let msg = b"test";
         let rng = ChaCha20Rng::from_seed([3;32]);
-        match aes_encrypt(msg, [2;32], rng) {
+        match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match aes_decrypt(aes_out.ciphertext, &vec![0,0,0,0,0,0,0,0,0,0,0,0], &aes_out.key) {
+                match decrypt(aes_out.ciphertext, &vec![0,0,0,0,0,0,0,0,0,0,0,0], &aes_out.key) {
                     Ok(_) => {
                         panic!("should be an error");
                     }, 

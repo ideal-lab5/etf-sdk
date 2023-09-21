@@ -5,7 +5,7 @@ edition = "2021"
 description = "cryptographic primitives for etf"
 license = "GPL3"
 repository = "https://github.com/ideal-lab5/etf-sdk"
-authors = "Tony Riemer <driemworks@idealabs.network>"
+authors = ["Tony Riemer <driemworks@idealabs.network>"]
 rust-version = "1.63"
 homepage = "idealabs.network"
 

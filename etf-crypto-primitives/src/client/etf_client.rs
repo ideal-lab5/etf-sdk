@@ -1,6 +1,6 @@
 /// ETF CLIENT
 use crate::{
-    encryption::encryption::*,
+    encryption::aes::*,
     ibe::fullident::{Ibe, IbeCiphertext},
     utils::convert_to_bytes,
 };
@@ -89,7 +89,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         let msk_bytes = convert_to_bytes::<Fr, 32>(msk);
         // Q: will this error ever occur?
         // not sure how to test for it
-        let ct_aes = aes_encrypt(message, msk_bytes.try_into().expect("should be 32 bytes;qed"), &mut rng)
+        let ct_aes = encrypt(message, msk_bytes, &mut rng)
             .map_err(|_| ClientError::AesEncryptError)?;
         
         let mut out: Vec<Vec<u8>> = Vec::new();
@@ -137,7 +137,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         }
         let secret_scalar = interpolate(dec_secrets);
         let o = convert_to_bytes::<Fr, 32>(secret_scalar);
-        let plaintext = aes_decrypt(ciphertext, &nonce, &o)
+        let plaintext = decrypt(ciphertext, &nonce, &o)
             .map_err(|_| ClientError::DecryptionError)?;
 
         Ok(plaintext)

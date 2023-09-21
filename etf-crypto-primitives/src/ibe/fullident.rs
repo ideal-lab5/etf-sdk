@@ -66,7 +66,7 @@ impl Ibe for BfIbe {
         let u: G2 = ibe_pp.mul(r); // U = rP
     
         // calc identity point
-        let q = hash_to_g1(&identity);
+        let q = hash_to_g1(identity);
         // e(Q_id, P_pub)
         let g_id = Bls12_381::pairing(q, p_pub).mul(r);
         // sigma (+) H2(e(Q_id, P_pub))
@@ -77,7 +77,7 @@ impl Ibe for BfIbe {
         let w_out = cross_product_32(message, &w_rhs);
         // (rP, sigma (+) H2(e(Q_id, P_pub)), message (+) H4(sigma))
         IbeCiphertext {
-            u: u, 
+            u,
             v: v_out.to_vec(), 
             w: w_out.to_vec(),
         }
