@@ -6,7 +6,7 @@ use ark_ec::AffineRepr;
 use etf_crypto_primitives::{
     ibe::fullident::BfIbe,
     proofs::verifier::IbeDleqVerifier,
-    client::client::DefaultEtfClient,
+    client::etf_client::DefaultEtfClient,
     utils::{convert_to_bytes, hash_to_g1},
 };
 use serde::{Deserialize, Serialize};
@@ -117,7 +117,7 @@ pub struct IbeTestParams {
 // #[cfg_attr(tarpaulin, skip)]
 #[wasm_bindgen]
 pub fn random_ibe_params() -> Result<JsValue, JsError> {
-    let ibe_pp: G2 = G2::generator().into();
+    let ibe_pp: G2 = G2::generator();
     let s = Fr::rand(&mut test_rng());
     let p_pub: G2 = ibe_pp.mul(s).into();
 
@@ -140,7 +140,7 @@ pub fn ibe_extract(x: JsValue, ids_bytes: JsValue) -> Result<JsValue, JsError> {
     for id in ids {
         let pk = hash_to_g1(&id);
         let sk = pk.mul(s);
-        let pk_bytes = convert_to_bytes::<G1, 48>(pk.into());
+        let pk_bytes = convert_to_bytes::<G1, 48>(pk);
         let sk_bytes = convert_to_bytes::<G1, 48>(sk.into());
         secrets.push((sk_bytes.to_vec(), pk_bytes.to_vec()));
     }

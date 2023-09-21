@@ -1,7 +1,7 @@
 use etf_crypto_primitives::{
     proofs::{dleq::DLEQProof, verifier::DleqVerifier},
     ibe::fullident::Ibe,
-    client::client::{EtfClient, AesIbeCt},
+    client::etf_client::{EtfClient, AesIbeCt},
 };
 
 use rand_chacha::ChaCha20Rng;
@@ -115,9 +115,9 @@ pub mod tests {
     use ark_serialize::CanonicalSerialize;
     use etf_crypto_primitives::{
         utils::hash_to_g1,
-        client::client::{AesIbeCt, ClientError},
+        client::etf_client::{AesIbeCt, ClientError},
         ibe::fullident::{IbeCiphertext, Ibe},
-        encryption::encryption::AESOutput,
+        encryption::aes::AESOutput,
         utils::convert_to_bytes,
     };
 
