@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "api",
+    "etf-sdk",
     "etf-crypto-primitives",
 ]
 resolver = "2"
