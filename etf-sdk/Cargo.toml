@@ -21,7 +21,7 @@ crate-type = [
 wasm-opt = false
 
 [dependencies]
-etf-crypto-primitives = { path = "../etf-crypto-primitives" }
+etf-crypto-primitives = { version = "0.2.0", default-features = false }
 serde-wasm-bindgen = { version = "0.4", default-features = false}
 wasm-bindgen = { version = "0.2", default-features = false}
 serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"]}
