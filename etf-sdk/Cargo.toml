@@ -5,6 +5,8 @@ edition = "2021"
 license = "GPL-3.0"
 description = "An API for calling etf crypto primitives for encryption and proof verification"
 repository = "https://github.com/ideal-lab5/etf-sdk"
+authors = "Tony Riemer <driemworks@idealabs.network>"
+homepage = "idealabs.network"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
