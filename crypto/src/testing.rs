@@ -27,7 +27,6 @@ pub fn test_ibe_params() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
 ///
 pub fn ibe_extract(x: Vec<u8>, ids: Vec<Vec<u8>>) -> Vec<(Vec<u8>, Vec<u8>)> {
     let s = Fr::deserialize_compressed(&x[..]).unwrap();
-    let mut secrets: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
     ids.iter().map(|id| {
         let pk = hash_to_g1(&id);
         let sk = pk.mul(s);
