@@ -2,7 +2,7 @@
 use crate::{
     encryption::aes::*,
     ibe::fullident::{Ibe, IbeCiphertext},
-    utils::convert_to_bytes,
+    utils::{convert_to_bytes, hash_to_g1},
 };
 use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -95,7 +95,15 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         let mut out: Vec<Vec<u8>> = Vec::new();
         for (idx, id) in ids.iter().enumerate() {
             let b = convert_to_bytes::<Fr, 32>(shares[idx].1).to_vec();
-            let ct = I::encrypt(p.into(), q.into(), &b.try_into().unwrap(), id, &mut rng);
+            let id_point = hash_to_g1(id);
+            let ct = 
+                I::encrypt(
+                    p.into(), 
+                    q.into(), 
+                    &b.try_into().unwrap(), 
+                    id_point.into(), &
+                    mut rng,
+                );
             let mut o = Vec::with_capacity(ct.compressed_size());
             // TODO: handle errors
             ct.serialize_compressed(&mut o).unwrap();

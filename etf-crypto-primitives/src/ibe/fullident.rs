@@ -9,7 +9,7 @@ use ark_std::{
     borrow::ToOwned,
 };
 use ark_std::vec::Vec;
-use crate::utils::{hash_to_g1, h2, h3, h4};
+use crate::utils::{h2, h3, h4};
 
 /// a ciphertext (U, V, W)
 /// Q: can I find a best way to aggregate the ciphertexts? 
@@ -25,8 +25,12 @@ pub struct IbeCiphertext {
 pub trait Ibe {
 
     fn encrypt<R: Rng + Sized>(
-        ibe_pp: G2, p_pub: G2,
-        message: &[u8;32], identity: &[u8], rng: R
+        ibe_pp: G2, 
+        p_pub: G2,
+        message: &[u8;32], 
+        // identity: &[u8], 
+        q: G1,
+        rng: R
     ) -> IbeCiphertext;
 
     fn decrypt(ibe_pp: G2, ciphertext: IbeCiphertext, sk: G1) -> Vec<u8>;
@@ -54,7 +58,8 @@ impl Ibe for BfIbe {
         ibe_pp: G2,
         p_pub: G2,
         message: &[u8;32],
-        identity: &[u8],
+        // identity: &[u8],
+        q: G1,
         mut rng: R,
     ) -> IbeCiphertext {
         // random sigma in {0, 1}^32
@@ -66,7 +71,7 @@ impl Ibe for BfIbe {
         let u: G2 = ibe_pp.mul(r); // U = rP
     
         // calc identity point
-        let q = hash_to_g1(identity);
+        // let q = hash_to_g1(identity);
         // e(Q_id, P_pub)
         let g_id = Bls12_381::pairing(q, p_pub).mul(r);
         // sigma (+) H2(e(Q_id, P_pub))
@@ -122,6 +127,7 @@ fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::utils::hash_to_g1;
     use ark_bls12_381::Fr;
     use ark_std::{test_rng, UniformRand, rand::RngCore};
 
@@ -129,6 +135,7 @@ mod test {
     pub fn can_encrypt_and_decrypt() {
         // setup
         let id_string = b"example@test.com";
+        let q = hash_to_g1(id_string);
         // a dummy message
         let message: [u8;32] = [2;32];
         // every participant knows the msk...
@@ -138,7 +145,7 @@ mod test {
         let ibe_pp = G2::rand(&mut test_rng());
         let p_pub = ibe_pp.mul(msk);
 
-        let ct = BfIbe::encrypt(ibe_pp, p_pub, &message, id_string, &mut test_rng());
+        let ct = BfIbe::encrypt(ibe_pp, p_pub, &message, q.into(), &mut test_rng());
         // then calculate our own secret
         let d = hash_to_g1(id_string).mul(msk);
 
