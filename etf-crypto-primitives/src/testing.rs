@@ -36,7 +36,7 @@ pub fn test_ibe_params_typed() -> (G2, G2, Fr) {
 ///
 pub fn ibe_extract(x: Vec<u8>, ids: Vec<Vec<u8>>) -> Vec<(Vec<u8>, Vec<u8>)> {
     let s = Fr::deserialize_compressed(&x[..]).unwrap();
-    ibe_exract_typed(s, ids).iter().map(|x| {
+    ibe_extract_typed(s, ids).iter().map(|x| {
         let pk_bytes = convert_to_bytes::<G1, 48>(x.1);
         let sk_bytes = convert_to_bytes::<G1, 48>(x.0);
         (sk_bytes.to_vec(), pk_bytes.to_vec())
@@ -51,7 +51,7 @@ pub fn ibe_extract(x: Vec<u8>, ids: Vec<Vec<u8>>) -> Vec<(Vec<u8>, Vec<u8>)> {
 /// * `s`: The secret key
 /// * `ids`: the slot ids
 ///
-pub fn ibe_exract_typed(s: Fr, ids: Vec<Vec<u8>>) -> Vec<(G1, G1)> {
+pub fn ibe_extract_typed(s: Fr, ids: Vec<Vec<u8>>) -> Vec<(G1, G1)> {
     ids.iter().map(|id| {
         let pk = hash_to_g1(id);
         let sk = pk.mul(s).into();
