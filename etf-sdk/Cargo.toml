@@ -1,10 +1,12 @@
 [package]
 name = "etf-sdk"
-version = "0.0.3-dev"
+version = "0.1.0-dev"
 edition = "2021"
-license = "GPL-3.0"
+license = "GPL-3.0-only"
 description = "An API for calling etf crypto primitives for encryption and proof verification"
 repository = "https://github.com/ideal-lab5/etf-sdk"
+authors = ["Tony Riemer <driemworks@idealabs.network>"]
+homepage = "https://idealabs.network"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
@@ -19,15 +21,16 @@ crate-type = [
 wasm-opt = false
 
 [dependencies]
-crypto = { path = "../crypto" }
+etf-crypto-primitives = { version = "0.2.0", default-features = false }
 serde-wasm-bindgen = { version = "0.4", default-features = false}
 wasm-bindgen = { version = "0.2", default-features = false}
-serde = { version = "1.0.160", default-features = false, features = ["derive"]}
+serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"]}
 ark-serialize = { version = "0.4.0", default-features = false }
 ark-std = { version = "0.4.0", default-features = false }
 getrandom = { version = "0.2", features = ["js"] }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
 ark-ec = { version = "0.4.0", default-features = false }
+rand_chacha = { version = "0.3.1", default-features = false }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.0"

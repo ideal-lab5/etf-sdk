@@ -33,14 +33,16 @@ function App() {
 
     let message = t.encode("hello world");
     let threshold = 2;
+    let seed = t.encode("seed");
 
     try {
-      let ct = api.encrypt(message, ids, threshold);
+      let ct = api.encrypt(message, ids, threshold, seed);
       console.log(JSON.stringify(ct));
       console.log("Running IBE extract to get ibe secrets");
       let sks = ibe_extract(ibeParams.s, ids);
       console.log(sks);
-      let plaintext = api.decrypt(ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, sks.map(sk => sk[0]));
+      let plaintext = api.decrypt(
+        ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, sks.map(sk => sk[0]));
       console.log(String.fromCharCode(...plaintext));
     } catch(e) {
       console.log(e);

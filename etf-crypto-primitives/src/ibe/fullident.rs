@@ -6,14 +6,9 @@ use ark_ec::pairing::Pairing;
 use ark_std::{
     ops::Mul,
     rand::Rng,
+    borrow::ToOwned,
 };
-
-#[cfg(not(feature = "std"))]
 use ark_std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
 use crate::utils::{hash_to_g1, h2, h3, h4};
 
 /// a ciphertext (U, V, W)
@@ -71,7 +66,7 @@ impl Ibe for BfIbe {
         let u: G2 = ibe_pp.mul(r); // U = rP
     
         // calc identity point
-        let q = hash_to_g1(&identity);
+        let q = hash_to_g1(identity);
         // e(Q_id, P_pub)
         let g_id = Bls12_381::pairing(q, p_pub).mul(r);
         // sigma (+) H2(e(Q_id, P_pub))
@@ -82,7 +77,7 @@ impl Ibe for BfIbe {
         let w_out = cross_product_32(message, &w_rhs);
         // (rP, sigma (+) H2(e(Q_id, P_pub)), message (+) H4(sigma))
         IbeCiphertext {
-            u: u, 
+            u,
             v: v_out.to_vec(), 
             w: w_out.to_vec(),
         }
@@ -117,7 +112,7 @@ impl Ibe for BfIbe {
 
 // TODO: can do this in place instead
 fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
-    let mut o = a.clone().to_owned();
+    let mut o = a.to_owned();
     for (i, ri) in o.iter_mut().enumerate().take(32) {
         *ri ^= b[i];
     }
@@ -127,12 +122,8 @@ fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand_chacha::{
-        ChaCha20Rng,
-        rand_core::SeedableRng,
-    };
     use ark_bls12_381::Fr;
-    use ark_std::{UniformRand, rand::RngCore};
+    use ark_std::{test_rng, UniformRand, rand::RngCore};
 
     #[test]
     pub fn can_encrypt_and_decrypt() {
@@ -140,15 +131,14 @@ mod test {
         let id_string = b"example@test.com";
         // a dummy message
         let message: [u8;32] = [2;32];
-        let mut rng = ChaCha20Rng::seed_from_u64(23u64);
         // every participant knows the msk...
         // could be replaced by an MPC protocol
-        let msk = Fr::from(rng.next_u64());
+        let msk = Fr::from(test_rng().next_u64());
         // a random element of G1, the IBE public parameter
-        let ibe_pp = G2::rand(&mut rng);
+        let ibe_pp = G2::rand(&mut test_rng());
         let p_pub = ibe_pp.mul(msk);
 
-        let ct = BfIbe::encrypt(ibe_pp, p_pub, &message, id_string, &mut rng);
+        let ct = BfIbe::encrypt(ibe_pp, p_pub, &message, id_string, &mut test_rng());
         // then calculate our own secret
         let d = hash_to_g1(id_string).mul(msk);
 

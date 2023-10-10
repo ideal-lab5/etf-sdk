@@ -1,5 +1,5 @@
 use aes_gcm::{
-    aead::{Aead, AeadCore, AeadInPlace, KeyInit, OsRng},
+    aead::{Aead, AeadCore, AeadInPlace, KeyInit},
     Aes256Gcm, Nonce, // Or `Aes128Gcm`
 };
 use ark_std::rand::Rng;
@@ -10,16 +10,16 @@ use ark_poly::{
     DenseUVPolynomial, Polynomial,
 };
 use serde::{Deserialize, Serialize};
+// use alloc::vec::Vec;
 
-#[cfg(not(feature = "std"))]
+use ark_std::rand::CryptoRng;
 use ark_std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::vec::Vec;
-
-#[derive(Debug, Serialize, Deserialize)]
+/// The output of AES Encryption plus the ephemeral secret key
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AESOutput {
+    /// the AES ciphertext
     pub ciphertext: Vec<u8>,
+    /// the AES nonce
     pub nonce: Vec<u8>,
     pub key: Vec<u8>,
 }
@@ -36,9 +36,9 @@ pub enum Error {
 ///
 /// * `message`: The message to encrypt
 ///
-pub fn aes_encrypt(message: &[u8], key: [u8;32]) -> Result<AESOutput, Error> {
+pub fn encrypt<R: Rng + CryptoRng + Sized>(message: &[u8], key: [u8;32], mut rng: R) -> Result<AESOutput, Error> {
     let cipher = Aes256Gcm::new(generic_array::GenericArray::from_slice(&key));
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
+    let nonce = Aes256Gcm::generate_nonce(&mut rng); // 96-bits; unique per message
 
     let mut buffer: Vec<u8> = Vec::new(); // Note: buffer needs 16-bytes overhead for auth tag
     buffer.extend_from_slice(message);
@@ -53,12 +53,12 @@ pub fn aes_encrypt(message: &[u8], key: [u8;32]) -> Result<AESOutput, Error> {
     })
 }
 
-pub fn aes_decrypt(ciphertext: Vec<u8>, nonce_slice: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn decrypt(ciphertext: Vec<u8>, nonce_slice: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     // not sure about that...
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| Error::InvalidKey)?;
     let nonce = Nonce::from_slice(nonce_slice);
-    let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref())
+    let plaintext = cipher.decrypt(nonce, ciphertext.as_ref())
         .map_err(|_| Error::DecryptionError)?;
     Ok(plaintext)
 }
@@ -121,14 +121,16 @@ pub fn interpolate(evaluations: Vec<(Fr, Fr)>) -> Fr {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ark_std::test_rng;
+    use rand_chacha::ChaCha20Rng;
+    use ark_std::rand::SeedableRng;
 
     #[test]
     pub fn aes_encrypt_decrypt_works() {
         let msg = b"test";
-        match aes_encrypt(msg, [2;32]) {
+        let rng = ChaCha20Rng::from_seed([2;32]);
+        match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match aes_decrypt(aes_out.ciphertext, &aes_out.nonce, &aes_out.key) {
+                match decrypt(aes_out.ciphertext, &aes_out.nonce, &aes_out.key) {
                     Ok(plaintext) => {
                         assert_eq!(msg.to_vec(), plaintext);
                     }, 
@@ -146,10 +148,11 @@ mod test {
     #[test]
     pub fn aes_encrypt_decrypt_fails_with_bad_key() {
         let msg = b"test";
-        match aes_encrypt(msg, [2;32]) {
+        let rng = ChaCha20Rng::from_seed([1;32]);
+        match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match aes_decrypt(aes_out.ciphertext, &aes_out.nonce, &b"hi".to_vec()) {
-                    Ok(plaintext) => {
+                match decrypt(aes_out.ciphertext, &aes_out.nonce, &b"hi".to_vec()) {
+                    Ok(_) => {
                         panic!("should be an error");
                     }, 
                     Err(e) => {
@@ -166,9 +169,10 @@ mod test {
     #[test]
     pub fn aes_encrypt_decrypt_fails_with_bad_nonce() {
         let msg = b"test";
-        match aes_encrypt(msg, [2;32]) {
+        let rng = ChaCha20Rng::from_seed([3;32]);
+        match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match aes_decrypt(aes_out.ciphertext, &vec![0,0,0,0,0,0,0,0,0,0,0,0], &aes_out.key) {
+                match decrypt(aes_out.ciphertext, &vec![0,0,0,0,0,0,0,0,0,0,0,0], &aes_out.key) {
                     Ok(_) => {
                         panic!("should be an error");
                     }, 
@@ -187,7 +191,8 @@ mod test {
     fn secrets_interpolation() {
         let n = 5; // Number of participants
         let t = 3; // Threshold
-        let (msk, shares) = generate_secrets(n, t, &mut test_rng());
+        let rng = ChaCha20Rng::from_seed([4;32]);
+        let (msk, shares) = generate_secrets(n, t, rng);
         // Perform Lagrange interpolation
         let interpolated_msk = interpolate(shares);
         // Check if the msk and the interpolated msk match

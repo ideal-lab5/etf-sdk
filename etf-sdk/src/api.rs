@@ -1,9 +1,11 @@
-use crypto::{
+use etf_crypto_primitives::{
     proofs::{dleq::DLEQProof, verifier::DleqVerifier},
     ibe::fullident::Ibe,
-    client::client::{EtfClient, AesIbeCt},
+    client::etf_client::{EtfClient, AesIbeCt},
 };
 
+use rand_chacha::ChaCha20Rng;
+use ark_std::rand::SeedableRng;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 #[derive(Debug)]
@@ -29,6 +31,7 @@ pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
         message: &[u8], 
         slot_ids: Vec<Vec<u8>>, 
         t: u8,
+        seed: &[u8],
     ) -> Result<AesIbeCt, Error>;
 
     // decrypt the message with the given sk
@@ -44,12 +47,14 @@ pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
 ///  the default implementation of the etf api
 /// https://stackoverflow.com/questions/50200197/how-do-i-share-a-struct-containing-a-phantom-pointer-among-threads
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+// pub struct DefaultApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
 pub struct DefaultApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
     // ibe: BfIbe,
     _d: ark_std::marker::PhantomData<fn() -> D>,
     _i: ark_std::marker::PhantomData<fn() -> I>,
     _e: ark_std::marker::PhantomData<fn() -> E>,
 }
+
 impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D, I, E>  {
 
     /// verify a dleq proof using the IbeDleqVerifier
@@ -78,9 +83,12 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
         message: &[u8], 
         slot_ids: Vec<Vec<u8>>,
         t: u8,
+        seed: &[u8],
     ) -> Result<AesIbeCt, Error> {
-        // verification? t > 0
-        let res = E::encrypt(ibe_pp_bytes, p_pub_bytes, message, slot_ids, t)
+        let seed_hash = etf_crypto_primitives::utils::sha256
+            (&etf_crypto_primitives::utils::sha256(seed));
+        let rng = ChaCha20Rng::from_seed(seed_hash.try_into().expect("should be 32 bytes; qed"));
+        let res = E::encrypt(ibe_pp_bytes, p_pub_bytes, message, slot_ids, t, rng)
             .map_err(|_| Error::EncryptionError)?;
         Ok(res)
     }
@@ -101,15 +109,15 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use ark_std::{test_rng, UniformRand, ops::Mul, rand::Rng};
+    use ark_std::{test_rng, UniformRand, ops::Mul, rand::{CryptoRng, Rng}};
     use ark_bls12_381::{G1Affine as G1, G2Affine as G2, G1Projective, G2Projective, Fr};
     use ark_ec::AffineRepr;
     use ark_serialize::CanonicalSerialize;
-    use crypto::{
+    use etf_crypto_primitives::{
         utils::hash_to_g1,
-        client::client::AesIbeCt,
+        client::etf_client::{AesIbeCt, ClientError},
         ibe::fullident::{IbeCiphertext, Ibe},
-        encryption::encryption::AESOutput,
+        encryption::aes::AESOutput,
         utils::convert_to_bytes,
     };
 
@@ -130,9 +138,9 @@ pub mod tests {
     impl<I: Ibe> EtfClient<I> for MockEtfClient {
         // Implement the required methods for the trait
  
-        fn encrypt(
-            _p: Vec<u8>, _q: Vec<u8>, _m: &[u8], _ids: Vec<Vec<u8>>, _t: u8,
-        ) -> Result<AesIbeCt, crypto::client::client::ClientError> {
+        fn encrypt<R: Rng + CryptoRng + Sized>(
+            _p: Vec<u8>, _q: Vec<u8>, _m: &[u8], _ids: Vec<Vec<u8>>, _t: u8, _rng: R,
+        ) -> Result<AesIbeCt, ClientError> {
             Ok(AesIbeCt {
                 aes_ct: AESOutput {
                     ciphertext: vec![1, 2, 3],
@@ -148,7 +156,7 @@ pub mod tests {
             _nonce: Vec<u8>, 
             _capsule: Vec<Vec<u8>>, 
             _secrets: Vec<Vec<u8>>
-        ) -> Result<Vec<u8>, crypto::client::client::ClientError> {
+        ) -> Result<Vec<u8>, ClientError> {
             Ok(vec![5, 6, 7])
         }
     }
@@ -209,7 +217,7 @@ pub mod tests {
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
         match DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::
-            encrypt(ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(), message, slot_ids, t) {
+            encrypt(ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(), message, slot_ids, t, b"seed") {
                 Ok(_) => { },
                 Err(_) => { panic!("the encrypt call should work") },
         }
