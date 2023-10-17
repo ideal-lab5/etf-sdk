@@ -3,6 +3,15 @@ This is an SDK to build on top of the EtF protocol. Specifically, it contains cr
 
 It consists of two packages:
 
-- `crypto` contains implementations in arkworks
-- `api` is an API to expose timelock encryption and DLEQ proof verification, and make compilable to wasm
+- `etf-crypto-primitives` contains implementations in arkworks
+- `etf-sdk` is an API to expose timelock encryption and DLEQ proof verification, and make compilable to wasm
 
+> :warning: This library is a WIP and should not be considered safe for production use.
+
+## Testing
+
+We aim for a minimum of 85% coverage on all lines. To check coverage, we use tarpaulin with opt-level=0:
+
+``` bash
+cargo tarpaulin --rustflags="-C opt-level=0"
+```

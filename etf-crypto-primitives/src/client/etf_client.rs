@@ -29,6 +29,7 @@ pub enum ClientError {
     DeserializationErrorG2,
     DeserializationErrorFr,
     DecryptionError,
+    VectorDimensionMismatch,
 }
 
 pub trait EtfClient<I: Ibe> {
@@ -129,6 +130,10 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         secrets: Vec<Vec<u8>>,
     ) -> Result<Vec<u8>, ClientError> {
         let mut dec_secrets: Vec<(Fr, Fr)> = Vec::new();
+        // ensure capsule and secrets have the same size
+        if !capsule.len().eq(&secrets.len()) {
+            return Err(ClientError::VectorDimensionMismatch);
+        }
         let p = G2::deserialize_compressed(&ibe_pp[..])
             .map_err(|_| ClientError::DeserializationErrorG2)?;
         for (idx, e) in capsule.iter().enumerate() {
@@ -315,9 +320,10 @@ mod test {
         let ibe_pp: G2 = G2::generator();
         let p_pub_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let cap = vec![vec![1,2,3]];
+        let sks = vec![vec![1]];
         // bad capsule
         match DefaultEtfClient::<BfIbe>::decrypt(
-            p_pub_bytes.to_vec(), vec![], vec![], cap, vec![], 
+            p_pub_bytes.to_vec(), vec![], vec![], cap, sks, 
         ) {
             Ok(_) => {
                 panic!("should be an error");
@@ -354,20 +360,21 @@ mod test {
             Ok(ct) => {
                 // calculate secret keys: Q = H1(id), d = sQ
                 let b = Fr::rand(&mut test_rng());
-                let secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
+                let mut secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
                     let q = hash_to_g1(&id);
                     let d = q.mul(b);
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
+                secrets[0] = vec![];
                 match DefaultEtfClient::<BfIbe>::decrypt(
-                    ibe_pp_bytes.to_vec(), vec![], 
+                    ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, 
                     ct.aes_ct.nonce, ct.etf_ct, secrets, 
                 ) {
                     Ok(_) => {
                         panic!("should be an error");
                     }, 
                     Err(e) => {
-                        assert_eq!(e, ClientError::DecryptionError);
+                        assert_eq!(e, ClientError::DeserializationErrorG1);
                     }
                 }
             },
