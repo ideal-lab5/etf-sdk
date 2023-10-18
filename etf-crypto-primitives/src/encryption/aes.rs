@@ -36,7 +36,11 @@ pub enum Error {
 ///
 /// * `message`: The message to encrypt
 ///
-pub fn encrypt<R: Rng + CryptoRng + Sized>(message: &[u8], key: [u8;32], mut rng: R) -> Result<AESOutput, Error> {
+pub fn encrypt<R: Rng + CryptoRng + Sized>(
+    message: &[u8], 
+    key: [u8;32], 
+    mut rng: R,
+) -> Result<AESOutput, Error> {
     let cipher = Aes256Gcm::new(generic_array::GenericArray::from_slice(&key));
     let nonce = Aes256Gcm::generate_nonce(&mut rng); // 96-bits; unique per message
 
@@ -53,7 +57,17 @@ pub fn encrypt<R: Rng + CryptoRng + Sized>(message: &[u8], key: [u8;32], mut rng
     })
 }
 
-pub fn decrypt(ciphertext: Vec<u8>, nonce_slice: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+/// AES-GCM decryption
+///
+/// * `ciphertext`: the ciphertext to decrypt
+/// * `nonce`: the nonce used on encryption
+/// * `key`: the key used for encryption
+///
+pub fn decrypt(
+    ciphertext: Vec<u8>, 
+    nonce_slice: &[u8], 
+    key: &[u8],
+) -> Result<Vec<u8>, Error> {
     // not sure about that...
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| Error::InvalidKey)?;
