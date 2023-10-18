@@ -1,5 +1,5 @@
 # etf-sdk
-This is an SDK to build on top of the EtF protocol. Specifically, it contains cryptographic primitives used by the etf network, as well as enables timelock encryption. It is wasm-compilable and so able to be called from both rust and javascript contexts.
+This is an SDK to build protocols on top of the EtF network. Specifically, it contains cryptographic primitives used by the etf network, as well as implements timelock encryption via AES-GCM with SSS, where shares are encrypted for futures slots using IBE. It is wasm-compilable and so able to be called from both rust and javascript contexts.
 
 It consists of two packages:
 
