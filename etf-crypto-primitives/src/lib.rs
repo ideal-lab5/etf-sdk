@@ -19,6 +19,7 @@ pub mod encryption;
 pub mod ibe;
 pub mod proofs;
 pub mod client;
+pub mod dpss;
 
 // #[cfg(test)]
 pub mod testing;

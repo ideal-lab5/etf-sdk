@@ -32,8 +32,8 @@ ark-poly = { version = "0.4.0", default-features = false }
 ark-ec = { version = "0.4.0", default-features = false }
 ark-serialize = { version = "0.4.0", default-features = false }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
-ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature"] }
+ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature", "encryption"] }
+rand_chacha = { version = "0.3.1", default-features = false }
 
 [dev-dependencies]
 hex = "0.4.3"
-rand_chacha = { version = "0.3.1", default-features = false }
