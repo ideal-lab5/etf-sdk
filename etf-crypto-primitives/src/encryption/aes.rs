@@ -77,6 +77,8 @@ pub fn decrypt(
     Ok(plaintext)
 }
 
+/// TODO: move to common file
+/// TODO: refactor/rename
 /// Generate a random polynomial f and return evalulations (f(0), (1, f(1), ..., n, f(n)))
 /// f(0) is the 'secret' and the shares can be used to recover the secret with `let s = interpolate(shares);`
 ///
@@ -101,6 +103,28 @@ pub fn generate_secrets<R: Rng + Sized>(
             (e, f.evaluate(&e))
         }).collect();
     (msk, evals)
+}
+
+pub fn generate_shares_checked<R: Rng + Sized>(
+    s: Fr, n: u8, t: u8, mut rng: R
+) -> Vec<(Fr, Fr)> {
+    
+    if n == 1 {
+        let r = Fr::rand(&mut rng);
+        return vec![(Fr::zero(), r)];
+    }
+
+    let mut coeffs: Vec<Fr> = (0..t+1).map(|i| Fr::rand(&mut rng)).collect();
+    coeffs[0] = s.clone();
+
+    let f = DensePolynomial::<Fr>::from_coefficients_vec(coeffs);
+    let msk = f.evaluate(&Fr::zero());
+    let evals: Vec<(Fr, Fr)> = (1..n+1)
+        .map(|i| {
+            let e = Fr::from(i);
+            (e, f.evaluate(&e))
+        }).collect();
+    evals
 }
 
 /// TODO: move this to a common place

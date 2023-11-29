@@ -22,7 +22,7 @@ use ark_std::{
     collections::BTreeMap,
 };
 use crate::utils::hash_to_g1;
-use crate::encryption::aes::{generate_secrets, interpolate};
+use crate::encryption::aes::{generate_shares_checked, interpolate};
 
 type AuxData = Vec<u8>;
 
@@ -56,12 +56,16 @@ impl HighThresholdACSS {
     /// `aux`: Any aux data (pass through)
     /// `rng`: A random number generator
     fn build_shares<R: Rng + Sized>(
-        params: ACSSParams, n: u8, t: u8, aux: AuxData, mut rng: R,
-    ) -> (Vec<(Fr, Capsule)>, Fr, AuxData) {
+        params: ACSSParams, 
+        msk: Fr, 
+        msk_hat: Fr, 
+        n: u8, t: u8, 
+        aux: AuxData, mut rng: R,
+    ) -> (Vec<(Fr, Capsule)>, AuxData) {
         // f(x) -> [f(0), {(1, f(1)), ..., (n, f(n))}]
-        let (msk, evals) = generate_secrets(n, t, &mut rng);
+        let evals = generate_shares_checked(msk, n, t, &mut rng);
         // f_hat(x) (blinding polynomial)
-        let (_, evals_hat) = generate_secrets(n, t, &mut rng);
+        let evals_hat = generate_shares_checked(msk_hat, n, t, &mut rng);
         // merge the evaluations
         let mut result: Vec<(Fr, Capsule)> = Vec::new();
         let mut test = Vec::new();
@@ -79,7 +83,7 @@ impl HighThresholdACSS {
             };
         }
 
-        (result, msk, aux) 
+        (result, aux) 
 
         // // choose random polys
         // let p = DensePolynomial::<Fr>::rand(d, &mut rng);
@@ -147,10 +151,6 @@ impl HighThresholdACSS {
         (capsule.v.into(), capsule.v_hat.into(), capsule.commitment)
     }
 
-    // fn share_to_new_committee() {
-
-    // }
-
 }
 
 pub mod tests {
@@ -172,6 +172,7 @@ pub mod tests {
     };
 
     /// a helper struct to simulate a network for testing
+    #[derive(Clone)]
     pub struct TestNetwork {
         pub participants: Vec<Participant>,
         pub msk: Option<Fr>,
@@ -183,6 +184,25 @@ pub mod tests {
             TestNetwork { participants, msk: None }
         }
 
+        // /// update the network participants additively based on their intermediate shares
+        // /// this is kind of bad...
+        // pub fn merge_intermediate(&self, mut participants: Vec<Participant>) -> TestNetwork {
+        //      // Ensure that both input vectors have the same length
+        //     assert_eq!(
+        //         self.participants.len(),
+        //         participants.len(),
+        //         "Input vectors must have the same length"
+        //     );
+
+        //     // Iterate over both vectors simultaneously
+        //     for (network_participant, input_participant) in
+        //         self.participants.iter_mut().zip(participants.into_iter()) {
+        //         // Merge the intermediate shares of the input participant into the network participant
+        //         network_participant.append_intermediate(input_participant.intermediate_shares);
+        //     }
+        //     self.clone()
+        // }
+
         pub fn pubkeys(&self) -> Vec<G> {
             self.participants
                 .clone()
@@ -193,12 +213,14 @@ pub mod tests {
     }
 
     /// a helper 'participant' struct to simulate network partcipants
-    #[derive(Clone, PartialEq)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct Participant {
         secret_key: Fr,
         public_key: G,
         /// shares received by other participants in the current round
         received_shares: Option<(Fr, Fr, G)>,
+        /// shares received when a new committee is participating in a reshare
+        intermediate_shares: Vec<(Fr, Fr, G)>,
     }
 
     impl Participant {
@@ -207,28 +229,33 @@ pub mod tests {
             let public_key = G::generator().mul(secret_key.clone());
             Participant { 
                 secret_key, public_key,
-                received_shares: None
+                received_shares: None,
+                intermediate_shares: vec![],
             }
+        }
+
+        pub fn append_intermediate(&mut self, mut i: Vec<(Fr, Fr, G)>) -> &mut Self {
+            self.intermediate_shares.append(&mut i);
+            self
         }
     }
 
+    /// should probably be out of test scope
     /// a helper function to setup a default test network
     /// with randomly generated participants
-    pub fn setup_default() -> TestNetwork {
+    pub fn acss(
+        mut net: TestNetwork,
+        msk: Fr, msk_hat: Fr,
+        n: u8, t: u8,
+        params: ACSSParams
+    ) -> TestNetwork {
         // we simulate a network of participants
-        // build the 'network'
-        let n = 10u8;
-        let t = 7u8;
-        let mut net = TestNetwork::rand(n as usize);
-        let g = G::generator();
-        // // TODO: we need to find another generator...
-        let h = G::generator();
-        let params = ACSSParams { g, h };
-        // as a semi-trusted dealer...
-        // generate shares and the 'master secret key', sk
+        // as a semi-trusted dealer generate shares and the 'master secret key', sk
         // shares is a 'd' sharing of sk
-        let (shares_map, msk, _aux) = HighThresholdACSS::build_shares(
+        let (shares_map, _aux) = HighThresholdACSS::build_shares(
             params.clone(), // ACSS params
+            msk,
+            msk_hat,
             n, t,  // the threshold
             Vec::new(),  // aux data
             test_rng(), // rng
@@ -255,9 +282,18 @@ pub mod tests {
     // NOTE: This assumes that all participants agree on the ORDER of the committee
     #[test]
     pub fn acss_keygen_and_recovery_works() {
-        let net = setup_default();
+        let n = 10u8;
+        let t = 7u8;
+        let g = G::generator();
+        // // TODO: we need to find another generator...
+        let h = G::generator();
+        let params = ACSSParams { g, h };
+        let msk = Fr::rand(&mut test_rng());
+        let msk_hat = Fr::rand(&mut test_rng());
+        let mut net = TestNetwork::rand(n as usize);
+        net = acss(net, msk, msk_hat, n, t, params);
         // now we should be able to recover the sk from the shares via lagrange interpolation
-        let first_poly_evals: Vec<(Fr, Fr)> = net.participants.iter()
+        let first_poly_evals: Vec<(Fr, Fr)> = net.participants.clone().iter()
             .enumerate()
             .map(|(idx, p)| {
             (Fr::from((idx + 1) as u8), p.received_shares.unwrap().0)
@@ -268,8 +304,99 @@ pub mod tests {
 
     #[test]
     pub fn acss_reshare_works() {
+        // the current committee size and threshold
+        let n = 10u8;
+        let t = 7u8;
+        // the upcoming committee size and threshold
+        let m = 7u8;
+        let s = 5u8;
+
+        let g = G::generator();
+        // TODO: we need to find another generator...
+        let h = G::generator();
+        let params = ACSSParams { g, h };
         // first setup the network and initial shares + distribution
-        let net = setup_default();
+        let msk = Fr::rand(&mut test_rng());
+        let msk_hat = Fr::rand(&mut test_rng());
+        let mut net = TestNetwork::rand(n as usize);
+        net = acss(net, msk, msk_hat, n, t, params.clone());
+        // the network with the upcoming committee participating 
+        // this isn't a realist/ideal representation, just for testing purposes,
+        let mut next_net = TestNetwork::rand(m as usize);
+        // the participants in net will perform a key handoff to participants of next_net
+
         // now we need to define a new committee and prepare shares
+        // each participant generates new polynomials (acting as a dealer)
+        // let mut shared_secret_networks: Vec<TestNetwork> = Vec::new();
+        net.participants.iter().for_each(|p| {
+            // create a sharing a the participant's shares of s 
+            // with each member of the upcoming committee 
+            let participants = acss(
+                next_net.clone(),
+                p.received_shares.unwrap().0,
+                p.received_shares.unwrap().1,
+                m, s, 
+                params.clone(),
+            ).participants;
+            // let all_received_shares = participants.iter().map(|p| p.received_shares.unwrap()).collect::<Vec<_>>();
+            // next_net = next_net.merge_intermediate(participants);
+            next_net.participants.iter_mut()
+                .enumerate()
+                .for_each(|(idx, np)| np.intermediate_shares.push(participants[idx].received_shares.unwrap()));
+        });
+        // panic!("{:?}", next_net.participants);
+        // panic!("{:?}", net.participants.intermediate_shares);
+        // now we can "merge" the networks 
+        // I suppose this would be the MBVA process
+        // for now we will forgo that complexity in place of just reformatting the data
+
+        // each participant loops over the shared_secret_network_participants and builds a map of intermediate shares
+        // then uses these to interpolate polys and get secret shares
+
+        let mut next_committee_first_poly_shares: Vec<(Fr, Fr)> = Vec::new();
+        let mut next_committee_second_poly_shares: Vec<(Fr, Fr)> = Vec::new();
+
+        for i in 0..next_net.participants.len() {
+            let participant = next_net.participants[i].clone();
+            // then interpolate the secret shares from shares
+            // again this is assuming a globally agreed on order of everything and wouldn't
+            // work this way in practice
+            let first_share_poly_evals: Vec<(Fr, Fr)> = participant.intermediate_shares.clone().iter()
+                .enumerate()
+                .map(|(idx, share)| {
+                (Fr::from((idx + 1) as u8), share.0)
+            }).collect::<Vec<_>>();
+
+            let second_share_poly_evals: Vec<(Fr, Fr)> = participant.intermediate_shares.clone().iter()
+                .enumerate()
+                .map(|(idx, share)| {
+                (Fr::from((idx + 1) as u8), share.1)
+            }).collect::<Vec<_>>();
+
+            let first_recovered_share = crate::encryption::aes::interpolate(first_share_poly_evals);
+            let second_recovered_share = crate::encryption::aes::interpolate(second_share_poly_evals);
+            next_committee_first_poly_shares.push((Fr::from((i + 1) as u8), first_recovered_share));
+            next_committee_second_poly_shares.push((Fr::from((i + 1) as u8), second_recovered_share));
+        }
+        // then interpolate polys from the interpolated shares
+        let recovered_msk = crate::encryption::aes::interpolate(next_committee_first_poly_shares);
+        let recovered_msk_hat = crate::encryption::aes::interpolate(next_committee_second_poly_shares);
+
+        assert_eq!(msk, recovered_msk);
+
     }
+
+    // #[test]
+    // fn ok() {
+    //     let left: Vec<(u8, u8)> = vec![(1, 1), (2, 1), (3, 1)];
+    //     let right: Vec<(u8, u8)> = vec![(1, 2), (2, 3), (3, 4)];
+
+    //     let combined: Vec<(u8, u8)> = left
+    //         .iter()
+    //         .zip(right.iter())
+    //         .map(|((a, b), (_, b_prime))| (a.clone(), b + b_prime))
+    //         .collect();
+
+    //     assert_eq!(combined, vec![(1, 3), (2, 4), (3, 5)])
+    // }
 }
