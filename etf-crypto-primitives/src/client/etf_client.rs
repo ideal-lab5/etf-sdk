@@ -142,18 +142,19 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
                 .map_err(|_| ClientError::DeserializationError)?;
             let sk = G1::deserialize_compressed(&secrets[idx][..])
                 .map_err(|_| ClientError::DeserializationErrorG1)?;
-            let share_bytes = I::decrypt(p.into(), ct, sk.into());
-            // Q: The error probably should never happen...
+            let share_bytes = I::decrypt(p.into(), ct, sk.into())
+            .map_err(|_| ClientError::DecryptionError)?;
+            // The error probably should never happen...
             let share = Fr::deserialize_compressed(&share_bytes[..])
                 .map_err(|_| ClientError::DeserializationErrorFr)?;
             dec_secrets.push((Fr::from((idx + 1) as u8), share));
         }
         let secret_scalar = interpolate(dec_secrets);
         let o = convert_to_bytes::<Fr, 32>(secret_scalar);
-        let plaintext = decrypt(ciphertext, &nonce, &o)
-            .map_err(|_| ClientError::DecryptionError)?;
-
-        Ok(plaintext)
+        if let Ok(plaintext) = decrypt(ciphertext, &nonce, &o) {
+            return Ok(plaintext);
+        }
+        Err(ClientError::DecryptionError)
     }
 }
 
