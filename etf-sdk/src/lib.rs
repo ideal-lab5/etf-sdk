@@ -205,7 +205,7 @@ mod test {
     //     let etf = EtfApiWrapper::create(x1, x2);
     //     match etf.encrypt(message_js, slot_ids_js, 3) {
     //         Ok(ct) => {
-    //             let t: crypto::client::client::Ciphertext = serde_wasm_bindgen::from_value(ct).unwrap();
+    //             let t: crypto::client::client::AesIbeCt = serde_wasm_bindgen::from_value(ct).unwrap();
     //             let ct_bytes = serde_wasm_bindgen::to_value(&t.aes_ct.ciphertext).unwrap();
     //             let nonce_bytes = serde_wasm_bindgen::to_value(&t.aes_ct.nonce).unwrap();
     //             let capsule_bytes = serde_wasm_bindgen::to_value(&t.etf_ct).unwrap();
