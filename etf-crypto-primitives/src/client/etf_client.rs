@@ -6,7 +6,6 @@ use crate::{
 };
 use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-// use aes_gcm::aead::OsRng;
 use serde::{Deserialize, Serialize};
 
 use ark_std::{
@@ -14,6 +13,18 @@ use ark_std::{
     vec::Vec,
     rand::{CryptoRng, Rng},
 };
+
+/// a secret key used for encryption/decryption
+pub type OpaqueSecretKey = Vec<u8>;
+
+/// the result of successful decryption of a timelocked ciphertext
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DecryptionResult {
+    /// the recovered plaintext 
+    pub message: Vec<u8>,
+    /// the recovered secret key
+    pub secret: OpaqueSecretKey,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AesIbeCt {
@@ -49,7 +60,7 @@ pub trait EtfClient<I: Ibe> {
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>,
         secrets: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, ClientError>;
+    ) -> Result<DecryptionResult, ClientError>;
 }
 
 pub struct DefaultEtfClient<I> {
@@ -128,7 +139,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>,
         secrets: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, ClientError> {
+    ) -> Result<DecryptionResult, ClientError> {
         let mut dec_secrets: Vec<(Fr, Fr)> = Vec::new();
         // ensure capsule and secrets have the same size
         if !capsule.len().eq(&secrets.len()) {
@@ -152,7 +163,10 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         let secret_scalar = interpolate(dec_secrets);
         let o = convert_to_bytes::<Fr, 32>(secret_scalar);
         if let Ok(plaintext) = decrypt(ciphertext, &nonce, &o) {
-            return Ok(plaintext);
+            return Ok(DecryptionResult{
+                message: plaintext,
+                secret: o.to_vec(),
+            });
         }
         Err(ClientError::DecryptionError)
     }
@@ -205,8 +219,8 @@ mod test {
                 match DefaultEtfClient::<BfIbe>::decrypt(
                     ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets, 
                 ) {
-                    Ok(m) => {
-                        assert_eq!(message.to_vec(), m);
+                    Ok(decryption_result) => {
+                        assert_eq!(message.to_vec(), decryption_result.message);
                     }, 
                     Err(e) => {
                         panic!("Decryption should work but was: {:?}", e);
@@ -252,8 +266,8 @@ mod test {
                 match DefaultEtfClient::<BfIbe>::decrypt(
                     ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets, 
                 ) {
-                    Ok(m) => {
-                        assert_eq!(message.to_vec(), m);
+                    Ok(decryption_result) => {
+                        assert_eq!(message.to_vec(), decryption_result.message);
                     }, 
                     Err(e) => {
                         panic!("Decryption should work but was: {:?}", e);
