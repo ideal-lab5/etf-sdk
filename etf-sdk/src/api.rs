@@ -1,7 +1,7 @@
 use etf_crypto_primitives::{
     proofs::{dleq::DLEQProof, verifier::DleqVerifier},
     ibe::fullident::Ibe,
-    client::etf_client::{EtfClient, AesIbeCt},
+    client::etf_client::{EtfClient, EncryptionResult, DecryptionResult},
 };
 
 use rand_chacha::ChaCha20Rng;
@@ -32,7 +32,7 @@ pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
         slot_ids: Vec<Vec<u8>>, 
         t: u8,
         seed: &[u8],
-    ) -> Result<AesIbeCt, Error>;
+    ) -> Result<EncryptionResult, Error>;
 
     // decrypt the message with the given sk
     fn decrypt(
@@ -41,7 +41,7 @@ pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>, 
         sks: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, Error>;
+    ) -> Result<DecryptionResult, Error>;
 }
 
 ///  the default implementation of the etf api
@@ -84,7 +84,7 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
         slot_ids: Vec<Vec<u8>>,
         t: u8,
         seed: &[u8],
-    ) -> Result<AesIbeCt, Error> {
+    ) -> Result<EncryptionResult, Error> {
         let seed_hash = etf_crypto_primitives::utils::sha256
             (&etf_crypto_primitives::utils::sha256(seed));
         let rng = ChaCha20Rng::from_seed(seed_hash.try_into().expect("should be 32 bytes; qed"));
@@ -99,7 +99,7 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>, 
         sks: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<DecryptionResult, Error> {
         let res = E::decrypt(ibe_pp_bytes, ciphertext, nonce, capsule, sks)
             .map_err(|_| Error::DecryptionError)?;
         Ok(res)
@@ -115,8 +115,8 @@ pub mod tests {
     use ark_serialize::CanonicalSerialize;
     use etf_crypto_primitives::{
         utils::hash_to_g1,
-        client::etf_client::{AesIbeCt, ClientError},
-        ibe::fullident::{IbeCiphertext, Ibe},
+        client::etf_client::{Ciphertext, ClientError},
+        ibe::fullident::{IbeCiphertext, Ibe, IbeError},
         encryption::aes::AESOutput,
         utils::convert_to_bytes,
     };
@@ -140,14 +140,17 @@ pub mod tests {
  
         fn encrypt<R: Rng + CryptoRng + Sized>(
             _p: Vec<u8>, _q: Vec<u8>, _m: &[u8], _ids: Vec<Vec<u8>>, _t: u8, _rng: R,
-        ) -> Result<AesIbeCt, ClientError> {
-            Ok(AesIbeCt {
-                aes_ct: AESOutput {
+        ) -> Result<EncryptionResult, ClientError> {
+            Ok(EncryptionResult {
+                ciphertext: Ciphertext {
+                    aes_ct: AESOutput {
                     ciphertext: vec![1, 2, 3],
                     nonce: vec![2, 3, 4],
                     key: vec![3, 4, 5],
+                    },
+                    etf_ct:  vec![vec![4], vec![5], vec![6]].into(),
                 },
-                etf_ct:  vec![vec![4], vec![5], vec![6]].into(),
+                secret: vec![7, 8, 9],
             })
         }
         fn decrypt(
@@ -156,8 +159,8 @@ pub mod tests {
             _nonce: Vec<u8>, 
             _capsule: Vec<Vec<u8>>, 
             _secrets: Vec<Vec<u8>>
-        ) -> Result<Vec<u8>, ClientError> {
-            Ok(vec![5, 6, 7])
+        ) -> Result<DecryptionResult, ClientError> {
+            Ok(DecryptionResult{ message: vec![5, 6, 7], secret: vec![7, 8, 9] })
         }
     }
 
@@ -168,14 +171,14 @@ pub mod tests {
             ibe_pp: G2Projective, 
             _p_pub: G2Projective,
             _message: &[u8;32], 
-            _identity: &[u8], 
+            _identity: G1Projective, 
             _rng: R
         ) -> IbeCiphertext {
             IbeCiphertext{ u: ibe_pp, v: Vec::new(), w: Vec::new() }
         }
     
-        fn decrypt(_ibe_pp: G2Projective, _ciphertext: IbeCiphertext, _sk: G1Projective) -> Vec<u8> {
-            Vec::new()
+        fn decrypt(_ibe_pp: G2Projective, _ciphertext: IbeCiphertext, _sk: G1Projective) -> Result<Vec<u8>, IbeError> {
+            Ok(Vec::new())
         }
     }
  

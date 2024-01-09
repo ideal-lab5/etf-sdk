@@ -15,8 +15,30 @@ use ark_std::{
     rand::{CryptoRng, Rng},
 };
 
+/// a secret key used for encryption/decryption
+pub type OpaqueSecretKey = Vec<u8>;
+
+/// the result of successful decryption of a timelocked ciphertext
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AesIbeCt {
+pub struct DecryptionResult {
+    /// the recovered plaintext 
+    pub message: Vec<u8>,
+    /// the recovered secret key
+    pub secret: OpaqueSecretKey,
+}
+
+/// the result of succesesful encryption of a timelocked ciphertext
+#[derive(Serialize, Deserialize, Debug)]
+pub struct EncryptionResult {
+    /// the timelocked ciphertext
+    pub ciphertext: Ciphertext,
+    /// the randomly selected secret key
+    pub secret: OpaqueSecretKey,
+}
+
+/// an unbounded ciphertext
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Ciphertext {
     pub aes_ct: AESOutput,
     pub etf_ct: Vec<Vec<u8>>
 }
@@ -32,6 +54,7 @@ pub enum ClientError {
     VectorDimensionMismatch,
 }
 
+/// the etf client trait provides signatures for timelock encryption and decryption functions
 pub trait EtfClient<I: Ibe> {
     
     fn encrypt<R: Rng + CryptoRng + Sized>(
@@ -41,7 +64,7 @@ pub trait EtfClient<I: Ibe> {
         ids: Vec<Vec<u8>>,
         t: u8,
         rng: R,
-    ) -> Result<AesIbeCt, ClientError>; 
+    ) -> Result<EncryptionResult, ClientError>; 
 
     fn decrypt(
         ibe_pp: Vec<u8>,
@@ -49,7 +72,7 @@ pub trait EtfClient<I: Ibe> {
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>,
         secrets: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, ClientError>;
+    ) -> Result<DecryptionResult, ClientError>;
 }
 
 pub struct DefaultEtfClient<I> {
@@ -76,7 +99,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         ids: Vec<Vec<u8>>,
         t: u8,
         mut rng: R,
-    ) -> Result<AesIbeCt, ClientError> {
+    ) -> Result<EncryptionResult, ClientError> {
         // todo: verify: t < |ids|
         // todo: verify public params, error handling
         let p = G2::deserialize_compressed(&ibe_pp[..])
@@ -110,7 +133,10 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
             ct.serialize_compressed(&mut o).unwrap();
             out.push(o);
         }
-        Ok(AesIbeCt{ aes_ct: ct_aes, etf_ct: out })
+        Ok(EncryptionResult{
+            ciphertext: Ciphertext{ aes_ct: ct_aes, etf_ct: out },
+            secret: msk_bytes.to_vec(),
+        })
     }
 
     /// decrypt a ct blob 
@@ -128,7 +154,7 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>,
         secrets: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, ClientError> {
+    ) -> Result<DecryptionResult, ClientError> {
         let mut dec_secrets: Vec<(Fr, Fr)> = Vec::new();
         // ensure capsule and secrets have the same size
         if !capsule.len().eq(&secrets.len()) {
@@ -152,7 +178,10 @@ impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
         let secret_scalar = interpolate(dec_secrets);
         let o = convert_to_bytes::<Fr, 32>(secret_scalar);
         if let Ok(plaintext) = decrypt(ciphertext, &nonce, &o) {
-            return Ok(plaintext);
+            return Ok(DecryptionResult{
+                message: plaintext,
+                secret: o.to_vec(),
+            });
         }
         Err(ClientError::DecryptionError)
     }
@@ -195,7 +224,7 @@ mod test {
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
             message, ids.clone(), t, rng,
         ) {
-            Ok(ct) => {
+            Ok(encryption_result) => {
                 // calculate secret keys: Q = H1(id), d = sQ
                 let secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
                     let q = hash_to_g1(&id);
@@ -203,10 +232,14 @@ mod test {
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
                 match DefaultEtfClient::<BfIbe>::decrypt(
-                    ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets, 
+                    ibe_pp_bytes.to_vec(),
+                    encryption_result.ciphertext.aes_ct.ciphertext,
+                    encryption_result.ciphertext.aes_ct.nonce,
+                    encryption_result.ciphertext.etf_ct,
+                    secrets, 
                 ) {
-                    Ok(m) => {
-                        assert_eq!(message.to_vec(), m);
+                    Ok(decryption_result) => {
+                        assert_eq!(message.to_vec(), decryption_result.message);
                     }, 
                     Err(e) => {
                         panic!("Decryption should work but was: {:?}", e);
@@ -242,7 +275,7 @@ mod test {
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
             message, ids.clone(), t, rng
         ) {
-            Ok(ct) => {
+            Ok(encryption_result) => {
                 // calculate secret keys: Q = H1(id), d = sQ
                 let secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
                     let q = hash_to_g1(&id);
@@ -250,10 +283,14 @@ mod test {
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
                 match DefaultEtfClient::<BfIbe>::decrypt(
-                    ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets, 
+                    ibe_pp_bytes.to_vec(), 
+                    encryption_result.ciphertext.aes_ct.ciphertext,
+                    encryption_result.ciphertext.aes_ct.nonce,
+                    encryption_result.ciphertext.etf_ct, 
+                    secrets, 
                 ) {
-                    Ok(m) => {
-                        assert_eq!(message.to_vec(), m);
+                    Ok(d) => {
+                        assert_eq!(message.to_vec(), d.message);
                     }, 
                     Err(e) => {
                         panic!("Decryption should work but was: {:?}", e);
@@ -358,7 +395,7 @@ mod test {
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
             message, ids.clone(), t, rng,
         ) {
-            Ok(ct) => {
+            Ok(encryption_result) => {
                 // calculate secret keys: Q = H1(id), d = sQ
                 let b = Fr::rand(&mut test_rng());
                 let mut secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
@@ -368,8 +405,11 @@ mod test {
                 }).collect::<Vec<_>>();
                 secrets[0] = vec![];
                 match DefaultEtfClient::<BfIbe>::decrypt(
-                    ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, 
-                    ct.aes_ct.nonce, ct.etf_ct, secrets, 
+                    ibe_pp_bytes.to_vec(), 
+                    encryption_result.ciphertext.aes_ct.ciphertext, 
+                    encryption_result.ciphertext.aes_ct.nonce, 
+                    encryption_result.ciphertext.etf_ct, 
+                    secrets, 
                 ) {
                     Ok(_) => {
                         panic!("should be an error");
@@ -406,7 +446,7 @@ mod test {
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
             message, ids.clone(), t, rng,
         ) {
-            Ok(ct) => {
+            Ok(encryption_result) => {
                 // calculate secret keys: Q = H1(id), d = sQ
                 let secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
                     let q = hash_to_g1(&id);
@@ -414,8 +454,10 @@ mod test {
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
                 match DefaultEtfClient::<BfIbe>::decrypt(
-                    ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, 
-                    vec![0,0,0,0,0,0,0,0,0,0,0,0], ct.etf_ct, secrets, 
+                    ibe_pp_bytes.to_vec(), 
+                    encryption_result.ciphertext.aes_ct.ciphertext, 
+                    vec![0,0,0,0,0,0,0,0,0,0,0,0],
+                    encryption_result.ciphertext.etf_ct, secrets, 
                 ) {
                     Ok(_) => {
                         panic!("should be an error");
@@ -456,7 +498,7 @@ mod test {
             t,
             rng,
         ) {
-            Ok(ct) => {
+            Ok(encryption_result) => {
                 // calculate secret keys: Q = H1(id), d = sQ
                 let secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
                     let q = hash_to_g1(&id);
@@ -465,7 +507,9 @@ mod test {
                 }).collect::<Vec<_>>();
                 match DefaultEtfClient::<BfIbe>::decrypt(
                     ibe_pp_bytes.to_vec(), vec![], 
-                    ct.aes_ct.nonce, ct.etf_ct, secrets, 
+                    encryption_result.ciphertext.aes_ct.nonce,
+                    encryption_result.ciphertext.etf_ct,
+                    secrets, 
                 ) {
                     Ok(_) => {
                         panic!("should be an error");
