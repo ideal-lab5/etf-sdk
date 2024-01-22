@@ -1,7 +1,7 @@
 use etf_crypto_primitives::{
     proofs::{dleq::DLEQProof, verifier::DleqVerifier},
     ibe::fullident::Ibe,
-    client::etf_client::{EtfClient, AesIbeCt},
+    client::etf_client::{AesIbeCt, EtfClient, DecryptionResult},
 };
 
 use rand_chacha::ChaCha20Rng;
@@ -41,7 +41,7 @@ pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>, 
         sks: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, Error>;
+    ) -> Result<DecryptionResult, Error>;
 }
 
 ///  the default implementation of the etf api
@@ -99,7 +99,7 @@ impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D,
         nonce: Vec<u8>,
         capsule: Vec<Vec<u8>>, 
         sks: Vec<Vec<u8>>,
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<DecryptionResult, Error> {
         let res = E::decrypt(ibe_pp_bytes, ciphertext, nonce, capsule, sks)
             .map_err(|_| Error::DecryptionError)?;
         Ok(res)
@@ -116,7 +116,7 @@ pub mod tests {
     use etf_crypto_primitives::{
         utils::hash_to_g1,
         client::etf_client::{AesIbeCt, ClientError},
-        ibe::fullident::{IbeCiphertext, Ibe},
+        ibe::fullident::{IbeCiphertext, Ibe, IbeError},
         encryption::aes::AESOutput,
         utils::convert_to_bytes,
     };
@@ -156,8 +156,8 @@ pub mod tests {
             _nonce: Vec<u8>, 
             _capsule: Vec<Vec<u8>>, 
             _secrets: Vec<Vec<u8>>
-        ) -> Result<Vec<u8>, ClientError> {
-            Ok(vec![5, 6, 7])
+        ) -> Result<DecryptionResult, ClientError> {
+            Ok(DecryptionResult{ message: vec![5, 6, 7], secret: vec![7, 8, 9] })
         }
     }
 
@@ -168,14 +168,14 @@ pub mod tests {
             ibe_pp: G2Projective, 
             _p_pub: G2Projective,
             _message: &[u8;32], 
-            _identity: &[u8], 
+            _identity: G1Projective, 
             _rng: R
         ) -> IbeCiphertext {
             IbeCiphertext{ u: ibe_pp, v: Vec::new(), w: Vec::new() }
         }
     
-        fn decrypt(_ibe_pp: G2Projective, _ciphertext: IbeCiphertext, _sk: G1Projective) -> Vec<u8> {
-            Vec::new()
+        fn decrypt(_ibe_pp: G2Projective, _ciphertext: IbeCiphertext, _sk: G1Projective) -> Result<Vec<u8>, IbeError> {
+            Ok(Vec::new())
         }
     }
  

@@ -22,6 +22,11 @@ pub struct IbeCiphertext {
     pub w: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
+pub enum IbeError {
+    DecryptionFailed,
+}
+
 pub trait Ibe {
 
     fn encrypt<R: Rng + Sized>(
@@ -33,7 +38,7 @@ pub trait Ibe {
         rng: R
     ) -> IbeCiphertext;
 
-    fn decrypt(ibe_pp: G2, ciphertext: IbeCiphertext, sk: G1) -> Vec<u8>;
+    fn decrypt(ibe_pp: G2, ciphertext: IbeCiphertext, sk: G1) -> Result<Vec<u8>, IbeError>;
 }
 
 /// a struct to hold IBE public params
@@ -58,7 +63,6 @@ impl Ibe for BfIbe {
         ibe_pp: G2,
         p_pub: G2,
         message: &[u8;32],
-        // identity: &[u8],
         q: G1,
         mut rng: R,
     ) -> IbeCiphertext {
@@ -96,7 +100,7 @@ impl Ibe for BfIbe {
         ibe_pp: G2,
         ciphertext: IbeCiphertext,
         sk: G1,
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>, IbeError> {
         // sigma = V (+) H2(e(d_id, U))
         let sigma_rhs = h2(Bls12_381::pairing(sk, ciphertext.u));
         let sigma = cross_product_32(&ciphertext.v, &sigma_rhs);
@@ -108,9 +112,11 @@ impl Ibe for BfIbe {
         // check: U =? rP
         let r = h3(&sigma, &m);
         let u_check = ibe_pp.mul(r);
-        assert!(u_check.eq(&ciphertext.u));
+        if !u_check.eq(&ciphertext.u) {
+            return Err(IbeError::DecryptionFailed);
+        }
 
-        m
+        Ok(m)
     }
 
 }
@@ -149,7 +155,7 @@ mod test {
         // then calculate our own secret
         let d = hash_to_g1(id_string).mul(msk);
 
-        let recovered_message = BfIbe::decrypt(ibe_pp, ct, d);
+        let recovered_message = BfIbe::decrypt(ibe_pp, ct, d).unwrap();
         let message_vec = message.to_vec();
         assert_eq!(message_vec, recovered_message);
     }
