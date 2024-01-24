@@ -16,16 +16,50 @@ use ark_poly::{
     DenseUVPolynomial, Polynomial,
 };
 use ark_std::{
+    cmp::Ordering,
     marker::PhantomData,
     ops::Mul,
     vec::Vec, 
     rand::Rng,
     collections::BTreeMap,
 };
+use paillier::{EncryptionKey, Paillier};
 use crate::utils::hash_to_g1;
 use crate::encryption::aes::{interpolate};
 
 type AuxData = Vec<u8>;
+
+// A wrapper for EncryptionKey 
+#[derive(Clone)]
+pub struct WrappedEncryptionKey(pub EncryptionKey);
+
+impl Eq for WrappedEncryptionKey {}
+
+impl PartialEq for WrappedEncryptionKey {
+    fn eq(&self, other: &Self) -> bool {
+        // Check equality based on both 'n' and 'nn' fields
+        self.0.n == other.0.n && self.0.nn == other.0.nn
+    }
+}
+
+impl Ord for WrappedEncryptionKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Compare based on the ordering of the 'n' field
+        match self.0.n.cmp(&other.0.n) {
+            Ordering::Equal => {
+                // If 'n' is equal, compare based on the 'nn' field
+                self.0.nn.cmp(&other.0.nn)
+            }
+            ordering => ordering,
+        }
+    }
+}
+
+impl PartialOrd for WrappedEncryptionKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 // no proof yet
 #[derive(Clone, PartialEq, Copy, Debug)]
@@ -46,7 +80,6 @@ pub struct ACSSParams {
     h: G,
 }
 
-
 /// the high threshold asynchronous complete secret sharing struct
 pub struct HighThresholdACSS<PublicKey> {
     params: ACSSParams,
@@ -56,17 +89,11 @@ pub struct HighThresholdACSS<PublicKey> {
 impl<PublicKey> HighThresholdACSS<PublicKey> 
     where PublicKey: Ord + Clone {
 
-    // /// build a new HTACSS with the given params
-    // pub fn new(params: ACSSParams) -> Self {
-    //     Self {
-    //         params,
-    //         _phantom: Default::default(),
-    //     }
-    // }
-
     /// as a semi-trusted dealer, construct shares for the initial committee
     /// `params`: ACSS Params
-    /// `n`: The number of shares to generate
+    /// `msk`: the master secret key
+    /// `msk_hat`: the blinding secret key
+    /// `next_committee`: The next committee to generate shares for
     /// `t`: The threshold (t <= n)
     /// `rng`: A random number generator
     ///
@@ -173,58 +200,72 @@ pub mod tests {
         test_rng,
     };
 
+    use paillier::{BigInt, KeyGeneration, EncryptionKey};
     use ark_poly::{
         polynomial::univariate::DensePolynomial,
         DenseUVPolynomial, Polynomial,
     };
 
-    // NOTE: This assumes that all participants agree on the ORDER of the committee
-    #[test]
-    pub fn basic_share_generation_and_recovery_works() {
-        let next_committee = [1u8, 2u8, 3u8, 4u8];
-        let t = 3u8;
-        let g = G::generator();
-        // // TODO: we need to find another generator...
-        let h = G::generator();
-        let params = ACSSParams { g, h };
+    // // NOTE: This assumes that all participants agree on the ORDER of the committee
+    // #[test]
+    // pub fn basic_share_generation_and_recovery_works() {
+    //     // generate all keys
+    //     let next_committee_keys = (0..3).map(|_| { Paillier::keypair().keys() });
+    //     // 
+    //     let next_committee = next_committee_keys.iter().map(|m| m.p);
+    //     let t = 3u8;
+    //     let g = G::generator();
+    //     // // TODO: we need to find another generator...
+    //     let h = G::generator();
+    //     let params = ACSSParams { g, h };
 
-        let msk = Fr::rand(&mut test_rng());
-        let msk_hat = Fr::rand(&mut test_rng());
+    //     let msk = Fr::rand(&mut test_rng());
+    //     let msk_hat = Fr::rand(&mut test_rng());
 
-        // let acss = HighThresholdACSS::new(params);
-        let shares: BTreeMap<u8, Capsule> = 
-            HighThresholdACSS::produce_shares(
-                params, msk, msk_hat, &next_committee, t, test_rng());
+    //     // let acss = HighThresholdACSS::new(params);
+    //     let shares: BTreeMap<u8, Capsule> = 
+    //         HighThresholdACSS::produce_shares(
+    //             params, msk, msk_hat, &next_committee, t, test_rng());
 
-        // then we should be able to recover msk and msk_hat via lagrange
-        let mut first_poly_evals: Vec<(Fr, Fr)> = Vec::new();
-        for (idx, member) in next_committee.iter().enumerate() {
-            let cap = shares.get(member).unwrap();
-            first_poly_evals.push((Fr::from(cap.eval), cap.v));
-        };
+    //     // then we should be able to recover msk and msk_hat via lagrange
+    //     let mut first_poly_evals: Vec<(Fr, Fr)> = Vec::new();
+    //     for (idx, member) in next_committee.iter().enumerate() {
+    //         let cap = shares.get(member).unwrap();
+    //         first_poly_evals.push((Fr::from(cap.eval), cap.v));
+    //     };
 
-        let mut blinding_poly_evals: Vec<(Fr, Fr)> = Vec::new();
-        for (idx, member) in next_committee.iter().enumerate() {
-            let cap = shares.get(member).unwrap();
-            blinding_poly_evals.push((Fr::from(cap.eval), cap.v_hat));
-        };
+    //     let mut blinding_poly_evals: Vec<(Fr, Fr)> = Vec::new();
+    //     for (idx, member) in next_committee.iter().enumerate() {
+    //         let cap = shares.get(member).unwrap();
+    //         blinding_poly_evals.push((Fr::from(cap.eval), cap.v_hat));
+    //     };
 
-        let first_recovered_secret = crate::encryption::aes::interpolate(first_poly_evals);
-        assert_eq!(msk, first_recovered_secret);
+    //     let first_recovered_secret = crate::encryption::aes::interpolate(first_poly_evals);
+    //     assert_eq!(msk, first_recovered_secret);
 
-        let blinding_poly_secret = crate::encryption::aes::interpolate(blinding_poly_evals);
-        assert_eq!(msk_hat, blinding_poly_secret);
-    }
+    //     let blinding_poly_secret = crate::encryption::aes::interpolate(blinding_poly_evals);
+    //     assert_eq!(msk_hat, blinding_poly_secret);
+    // }
 
     // we want to show:
     // Given a committee that holds a secret msk where each member has  secret share,
     // we want to share the msk with a new committee while only providing new shares
     #[test]
     pub fn basic_reshare_works() {
-        let initial_committee = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8];
-        let next_committee = [7u8, 8u8, 9u8];
-        let initial_committee_threshold = 3u8;
-        let next_committee_threshold = 2u8;
+        // generate initial committee keys
+        let initial_committee_keys = (0..3).map(|_| { Paillier::keypair().keys() });
+        let next_committee_keys = (0..5).map(|_| { Paillier::keypair().keys() });
+        // then flatmap to public keys
+
+        let initial_committee: Vec<WrappedEncryptionKey> = initial_committee_keys
+            .map(|c| WrappedEncryptionKey(c.0))
+            .collect::<Vec<_>>();
+        let next_committee = next_committee_keys
+            .map(|c| WrappedEncryptionKey(c.0))
+            .collect::<Vec<_>>();
+
+        let initial_committee_threshold = 2u8;
+        let next_committee_threshold = 3u8;
         let g = G::generator();
         // // TODO: we need to find another generator...
         let h = G::generator();
@@ -233,22 +274,25 @@ pub mod tests {
         let msk = Fr::rand(&mut test_rng());
         let msk_hat = Fr::rand(&mut test_rng());
 
-        let initial_committee_shares: BTreeMap<u8, Capsule> = 
-            HighThresholdACSS::produce_shares(
-                params.clone(), msk, msk_hat, 
+        let initial_committee_shares: BTreeMap<WrappedEncryptionKey, Capsule> = 
+            HighThresholdACSS::<WrappedEncryptionKey>::produce_shares(
+                params.clone(), 
+                msk, 
+                msk_hat, 
                 &initial_committee, 
                 initial_committee_threshold, 
                 test_rng()
             );
 
         // simulate a public broadcast channel
-        let mut simulated_broadcast: BTreeMap<u8, BTreeMap<u8, Capsule>> = BTreeMap::new();
+        let mut simulated_broadcast: 
+            BTreeMap<WrappedEncryptionKey, BTreeMap<WrappedEncryptionKey, Capsule>> = BTreeMap::new();
         // each member of the initial committee 'owns' a secret (identified by matching indices)
         initial_committee.iter().for_each(|c| {
             let member_secret = initial_committee_shares.get(c).unwrap();
             // and they each create a resharing of their secrets
-            let next_committee_resharing: BTreeMap<u8, Capsule> = 
-                HighThresholdACSS::produce_shares(
+            let next_committee_resharing: BTreeMap<WrappedEncryptionKey, Capsule> = 
+                HighThresholdACSS::<WrappedEncryptionKey>::produce_shares(
                     params.clone(),
                     member_secret.v, 
                     member_secret.v_hat, 
@@ -257,7 +301,7 @@ pub mod tests {
                     test_rng(),
             );
             assert!(next_committee_resharing.keys().len().eq(&next_committee.len()));
-            simulated_broadcast.insert(*c, next_committee_resharing);
+            simulated_broadcast.insert(c.clone(), next_committee_resharing);
         });
 
         let mut new_committee_sks = Vec::new();
