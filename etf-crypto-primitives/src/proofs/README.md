@@ -1,12 +1,16 @@
-# DLEQ Proofs
+# Proofs
+
+A collection of proofs used in the ETF network.
+
+Most of these are sigma protocols with a Fiat-Shamir transform.
+
+## Paillier DLOG Proof
+A NIZK PoK that a dlog is a commitment to the preimage of a ciphertext
+https://www.di.ens.fr/~stern/data/St93.pdf
+
+## DLEQ Proof
 DLEQ proof and verification lib, currently over BLS12-381 only.
 
-Use at your own risk.
-
-## TODOs
-
-- [ ] make curve generic
-- [ ] benchmarking
-
 ## License
-GPLv3.0
+
+Apache2.0

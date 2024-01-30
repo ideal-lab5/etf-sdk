@@ -4,6 +4,11 @@ This is an implementation of the following work:
 
 https://eprint.iacr.org/2022/971.pdf
 
+https://eprint.iacr.org/2022/971.pdf
+https://www.di.ens.fr/~stern/data/St93.pdf
+https://www.di.ens.fr/david.pointcheval/Documents/Papers/2000_pkcA.pdf
+
+
 ## Usage
 
 TODO

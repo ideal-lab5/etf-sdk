@@ -2,15 +2,6 @@ use ark_bls12_381::{Fr, G1Projective as G};
 use ark_ec::CurveGroup;
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
 use ark_ff::{UniformRand, Zero};
-use ark_crypto_primitives::encryption::{
-    AsymmetricEncryptionScheme, 
-    elgamal::{
-        Ciphertext, 
-        ElGamal, 
-        Parameters, 
-        Randomness,
-    },
-};
 use ark_poly::{
     polynomial::univariate::DensePolynomial,
     DenseUVPolynomial, Polynomial,
@@ -156,16 +147,26 @@ impl<PublicKey> HighThresholdACSS<PublicKey>
             // encryption
             let v = Paillier::encrypt(&member.clone().into_inner(), u_bytes_64.as_slice());
             let v_hat = Paillier::encrypt(&member.clone().into_inner(), u_hat_bytes_64.as_slice());
-            // TODO: Encryption + ZKPoK
+            // TODO: ZKPoK
             let commitment = params.g.mul(u) + params.h.mul(u_hat);
+
+            // let proof = MultiDLogProof::prove(
+            //     &DLogStatement {
+            //         v,
+            //         v_hat,
+            //         commitment,
+            //         &member.clone(),
+            //     },
+            //     u, u_prime,
+            // );
 
             result.insert(
                 member.clone(),
                 Capsule {
                     eval: f_elem,
-                    v: v,
-                    v_hat: v_hat,
-                    commitment: commitment,
+                    v, v_hat,
+                    commitment,
+                    // proof,
                 }
             );
         };
@@ -189,9 +190,8 @@ impl<PublicKey> HighThresholdACSS<PublicKey>
         if let Ok(u) = Fr::deserialize_compressed(&u_u8_bytes[..]) {
             let blinding_u_bytes: Vec<u64> = Paillier::decrypt(&dk, &capsule.v_hat);
             let blinding_u_u8_bytes: Vec<u8> = blinding_u_bytes.iter().map(|u| *u as u8).collect::<Vec<_>>();
-            // panic!("{:?}", blinding_u_u8_bytes);
             if let Ok(u_blind) = Fr::deserialize_compressed(&blinding_u_u8_bytes[..]) {
-                // TODO: is this needed?
+                // TODO: verify the proof
                 // let c = params.g.mul(u.clone()) + params.h.mul(u_blind.clone());
                 // if !c.eq(&capsule.commitment.into_affine()) {
                 //     return Err(ACSSError::InvalidCommitment);
@@ -340,11 +340,8 @@ pub mod tests {
                     capsule.clone(),
                 ).unwrap();
                 // store somewhere
-
                 coeffs.push(u);
                 blinding_coeffs.push(u_hat);
-                // panic!("{:?}", u_hat);
-                // my_shares.push((u, u_hat));
             });
 
             // then each member of the new committee interpolates their new secrets
@@ -356,11 +353,7 @@ pub mod tests {
             
             let blinding_sk = crate::encryption::aes::interpolate(blinding_evals.clone());
             new_committee_blinding_sks.push(blinding_sk);
-
-            // panic!("{:?}", blinding_evals);
         });
-
-        // panic!("{:?}", new_committee_sks);
 
         // // then we can interpolate these sks and blinding_sks to recover the original msk, msk_hat
         let new_committee_evals = new_committee_sks.iter().enumerate().map(|(idx, item)| {
