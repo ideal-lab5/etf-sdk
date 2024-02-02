@@ -4,23 +4,19 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_bls12_381::{Fr, G1Affine};
-use ark_std::{
-    string::String,
-    vec::Vec
-};
+use ark_std::vec::Vec;
 use paillier::{KeyGeneration, Keypair, Paillier};
 
 /// create a new keypair for the paillier cryptosystem
-pub fn paillier_create_keypair() -> Result<String, serde_json::Error> {
-    let json = serde_json::to_string(&Paillier::keypair())?;
-    Ok(json)
+pub fn paillier_create_keypair() -> Result<Vec<u8>, bincode::Error> {
+    let bytes = bincode::serialize(&Paillier::keypair())?;
+    Ok(bytes)
 }
 
 /// create a new (ek, dk) from a keypair
-pub fn paillier_create_keys(keypair_bytes: String) 
-    -> Result<String, serde_json::Error> {
-    let kp: Keypair = serde_json::from_str(&keypair_bytes)?;
-    let keys = serde_json::to_string(&kp.keys())?;
+pub fn paillier_create_keys(keypair_bytes: Vec<u8>) -> Result<Vec<u8>, bincode::Error> {
+    let kp: Keypair = bincode::deserialize(&keypair_bytes)?;
+    let keys = bincode::serialize(&kp.keys())?;
     Ok(keys)
 }
 
