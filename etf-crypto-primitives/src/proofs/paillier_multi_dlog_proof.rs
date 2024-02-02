@@ -26,7 +26,7 @@ use crate::alloc::string::ToString;
 
 use ark_bls12_381::{Fr, G1Projective as G};
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use ark_ff::{BigInteger, PrimeField};
+use ark_ff::{BigInteger, PrimeField, UniformRand};
 use ark_ec::Group;
 use ark_std::{
     iter,
@@ -46,20 +46,25 @@ pub enum Error {
 /// NIZK Proof of knowledge that 
 /// a discrete log is a commitment to the preimage of a ciphertext
 ///
-/// https://www.di.ens.fr/~stern/data/St93.pdf
-/// the prove wants to convince a verifier that:
-// y = g ^ x mod p is the dlog of the preimage of the encryption G^s u^N 
+/// https://eprint.iacr.org/2022/971.pdf
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct DLogProof {
-    t: (Vec<u8>, BigInt),
+    t: (Vec<u8>, BigInt, BigInt),
     z: BigInt,
+    z_prime: BigInt,
     w: BigInt,
+    w_prime: BigInt,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DLogStatement {
+    /// a (serialized) generator of the elliptic curve group
+    pub g: Vec<u8>,
+    /// a (serialized) generator of the elliptic curve group
+    pub h: Vec<u8>,
     /// Y = G^x u^N
     pub ciphertext: BigInt,
+    pub ciphertext_prime: BigInt,
     /// (serialized) y = g ^ x mod p \in \mathbb{G}
     pub dlog: Vec<u8>,
     /// a Paillier encryption key
@@ -71,24 +76,27 @@ impl DLogProof {
     pub fn prove(
         statement: &DLogStatement, 
         u: &BigInt, 
+        u_prime: &BigInt,
         x: &BigInt,
+        x_prime: &BigInt,
     ) -> DLogProof {
         // let r = BigInt::sample_below(&statement.params.0);
         // using A = N
         let modulus = BigInt::from_bytes(Fr::MODULUS.to_bytes_be().as_slice());
         // r in [0, A = N^3]
         let r = BigInt::sample_below(&(statement.ek.n.clone() * statement.ek.nn.clone()));
+        let r_prime = BigInt::sample_below(&(statement.ek.n.clone() * statement.ek.nn.clone()));
         // s in [0, p - 1]
-        let s = BigInt::sample_below(&(modulus - 1));
+        let s = BigInt::sample_below(&(modulus.clone() - 1));        
+        let s_prime = BigInt::sample_below(&(modulus - 1));
         // representation of r as a field element (for arkworks)
-        let r_prime = Fr::from_be_bytes_mod_order(&r.to_bytes());
-        // convert generator to bytes
-        let g = G::generator();
-        let mut g_bytes = Vec::new();
-        g.serialize_compressed(&mut g_bytes).unwrap();
-
-        // y' = g^r mod p
-        let p = g.mul(r_prime);
+        let r_scalar = Fr::from_be_bytes_mod_order(&r.to_bytes());
+        let r_prime_scalar = Fr::from_be_bytes_mod_order(&r_prime.to_bytes());
+        // elliptic curve group generators
+        let g = G::deserialize_compressed(&statement.g[..]).unwrap();
+        let h = G::deserialize_compressed(&statement.h[..]).unwrap();
+        // y' = g^r h^{r'} mod p, the commitment 
+        let p = g.mul(r_scalar) + h.mul(r_prime_scalar);
         let mut p_bytes = Vec::new();
         p.serialize_compressed(&mut p_bytes).unwrap();
         // Y' = G^r s^N mod N^2 = enc(r;s)
@@ -97,10 +105,16 @@ impl DLogProof {
             RawPlaintext::from(r.clone()),
             &Randomness(s.clone())
         ).0.into_owned();
-        let t = (p_bytes.clone(), q.clone());
+        let q_prime = Paillier::encrypt_with_chosen_randomness(
+            &statement.ek,
+            RawPlaintext::from(r_prime.clone()),
+            &Randomness(s_prime.clone())
+        ).0.into_owned();
+        let t = (p_bytes.clone(), q.clone(), q_prime.clone());
         // e = H(g, G, y, Y, t.0, t.1)
         let e = compute_digest(
-            iter::once(g_bytes.as_slice()) // g
+            iter::once(statement.g.as_slice()) // g
+            .chain(iter::once(statement.h.as_slice())) // h
             .chain(iter::once(statement.ek.n.clone().to_string().as_bytes())) // G
             .chain(iter::once(statement.dlog.as_slice())) // y = g^x
             .chain(iter::once(statement.ciphertext.to_string().as_bytes())) // Y = G^x u^N
@@ -110,11 +124,16 @@ impl DLogProof {
 
         // z = r + ex
         let z = r + e.clone() * x;
+        // z' = r' + ex
+        let z_prime = r_prime + e.clone() * x_prime;
+
         // w = su^e mod N
         let w = s * BigInt::mod_pow(&u, &e, &statement.ek.n);
+        // w' = s'u'^e mod N
+        let w_prime = s_prime * BigInt::mod_pow(&u_prime, &e, &statement.ek.n);
 
         DLogProof {
-            t, z, w,
+            t, z, z_prime, w, w_prime,
         }
     }
 
@@ -122,17 +141,19 @@ impl DLogProof {
     pub fn verify(&self, statement: &DLogStatement) -> Result<(), Error> {
 
         // 1. Check Z < A
-        if self.z >= (statement.ek.n.clone() * statement.ek.nn.clone()) {
+        // 2. Check Z' < A
+        if self.z >= (statement.ek.n.clone() * statement.ek.nn.clone()) ||
+        self.z_prime >= (statement.ek.n.clone() * statement.ek.nn.clone()) {
             return Err(Error::InvalidZ);
         }
 
-        let g = G::generator();
-        let mut g_bytes = Vec::new();
-        g.serialize_compressed(&mut g_bytes).unwrap();
+        let g = G::deserialize_compressed(&statement.g[..]).unwrap();
+        let h = G::deserialize_compressed(&statement.h[..]).unwrap();
 
         // e = H(g, G, y, Y, t.0, t.1)
         let e: BigInt = compute_digest(
-            iter::once(g_bytes.as_slice()) // g
+            iter::once(statement.g.as_slice()) // g
+            .chain(iter::once(statement.h.as_slice())) // h
             .chain(iter::once(statement.ek.n.clone().to_string().as_bytes())) // G I think?
             .chain(iter::once(statement.dlog.as_slice())) // y = g^x
             .chain(iter::once(statement.ciphertext.to_string().as_bytes())) // Y = G^x u^N
@@ -141,35 +162,76 @@ impl DLogProof {
         );
 
         let e_scalar = Fr::from_be_bytes_mod_order(&e.to_bytes());
-        // y' = g^r
+        // y' = g^r h^{r'}
         let gr = G::deserialize_compressed(&self.t.0[..]).unwrap();
-        // y = g^x
+        // y = g^x h^{x'}
         let y = G::deserialize_compressed(&statement.dlog[..]).unwrap();
-        // 2. CHECK t.0 = g^r == g^z y^{-e} mod p
-        let group_check = g.mul(Fr::from_be_bytes_mod_order(&self.z.to_bytes())) + y.mul(e_scalar.neg());
+
+        // 2. CHECK t.0 = g^r h^{r'} mod p == g^z h^{z'} y^{-e} mod p
+        let group_check = 
+            g.mul(Fr::from_be_bytes_mod_order(&self.z.to_bytes())) 
+            + h.mul(Fr::from_be_bytes_mod_order(&self.z_prime.to_bytes())) 
+            + y.mul(e_scalar.neg());
         if !group_check.eq(&gr) {
             return Err(Error::InvalidCommitment)
         }
-        // 3. CHECK t.1 = enc(r;s) == enc(z,w) Y^{-e} mod N^2
-        let ezw = Paillier::encrypt_with_chosen_randomness(
-            &statement.ek,
-            RawPlaintext::from(self.z.clone()),
-            &Randomness(self.w.clone()),
-        ).0.into_owned();
+        // 3. CHECK t.1 = enc(r;s) == enc(z,w) Y^{-e} mod N^2   
+        check_ciphertext(
+            &e.clone(),
+            self.z.clone(),
+            self.w.clone(), 
+            &statement.ciphertext,
+            &self.t.1,
+            statement.ek.clone(),
+        )?;
 
-        // enc(z;w) * [(Y^e mod N^2)^{-1} mod N^2]
-        let field_check = ezw as BigInt * 
-            BigInt::mod_inv(
-                &BigInt::mod_pow(&statement.ciphertext, &e.clone(), &statement.ek.nn), 
-                &statement.ek.nn
-            ).unwrap() % &statement.ek.nn;
-
-        if !field_check.eq(&self.t.1) {
-            return Err(Error::InvalidCiphertext);
-        }
+        // 4. CHECK t.2 = enc(r';s') == enc(z',w') Y'^{-e} mod N^2   
+        check_ciphertext(
+            &e.clone(),
+            self.z_prime.clone(),
+            self.w_prime.clone(), 
+            &statement.ciphertext_prime,
+            &self.t.2,
+            statement.ek.clone(),
+        )?;
 
         Ok(())
     }
+}
+
+/// Given Y = enc(x; u) (ciphertext), e = H(...) , z = r + ex, w = su^e mod N 
+/// Check that:
+///     enc(z;w) * Y^{-e} mod N^2 === verification_ciphertext
+/// 
+/// in our case, the verification ciphertext looks like enc(r;s)
+///
+fn check_ciphertext(
+    e: &BigInt,
+    z: BigInt, 
+    w: BigInt, 
+    ciphertext: &BigInt,
+    verification_ciphertext: &BigInt,
+    ek: EncryptionKey,
+) -> Result<(), Error> {
+     // enc(z,w) Y^{-e} mod N^2
+     let ezw = Paillier::encrypt_with_chosen_randomness(
+        &ek,
+        RawPlaintext::from(z.clone()),
+        &Randomness(w.clone()),
+    ).0.into_owned();
+
+    // enc(z;w) * [(Y^e mod N^2)^{-1} mod N^2]
+    let field_check = ezw as BigInt * 
+        BigInt::mod_inv(
+            &BigInt::mod_pow(ciphertext, e, &ek.nn), 
+            &ek.nn
+        ).unwrap() % &ek.nn;
+
+    if !field_check.eq(verification_ciphertext) {
+        return Err(Error::InvalidCiphertext);
+    }
+
+    Ok(())
 }
 
 pub fn compute_digest<'a, I>(byte_slices: I) -> BigInt
@@ -202,27 +264,52 @@ mod tests {
         let (ek, _dk) = Paillier::keypair().keys();
         // x \in [0, G]
         let x = BigInt::sample_below(&ek.n);
+        let x_prime = BigInt::sample_below(&ek.n);
         let u = BigInt::sample_below(&ek.n);
+        let u_prime = BigInt::sample_below(&ek.n);
         // enc(x;u)
-        let ciphertext = Paillier::encrypt_with_chosen_randomness(
+        let enc_xu = Paillier::encrypt_with_chosen_randomness(
             &ek, 
             RawPlaintext::from(x.clone()),
             &Randomness(u.clone()),
         );
 
+        let enc_xu_prime = Paillier::encrypt_with_chosen_randomness(
+            &ek, 
+            RawPlaintext::from(x_prime.clone()),
+            &Randomness(u_prime.clone()),
+        );
+
         let x_scalar = Fr::from_be_bytes_mod_order(&x.to_bytes());
-        let dlog = G::generator().mul(x_scalar);
+        let x_prime_scalar = Fr::from_be_bytes_mod_order(&x_prime.to_bytes());
+
+        let g = G::generator();
+        let h = G::rand(&mut test_rng());
+
+        let mut g_bytes = Vec::new();
+        g.serialize_compressed(&mut g_bytes).unwrap();
+        let mut h_bytes = Vec::new();
+        h.serialize_compressed(&mut h_bytes).unwrap();
+
+        let dlog = g.mul(x_scalar) + h.mul(x_prime_scalar);
         let mut dlog_bytes = Vec::new();
         dlog.serialize_compressed(&mut dlog_bytes).unwrap();
 
         // A >= B * S + k'
         // currently using A = N
         let statement = DLogStatement {
-            ciphertext: ciphertext.into(),
+            g: g_bytes, 
+            h: h_bytes,
+            ciphertext: enc_xu.into(),
+            ciphertext_prime: enc_xu_prime.into(),
             dlog: dlog_bytes,
             ek: ek,
         };
-        let proof = DLogProof::prove(&statement, &u, &x);
+        let proof = DLogProof::prove(
+            &statement, 
+            &u, &u_prime,
+            &x, &x_prime,
+        );
         let verification = proof.verify(&statement);
         assert!(verification.is_ok());
     }
