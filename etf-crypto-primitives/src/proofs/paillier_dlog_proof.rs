@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /*
  * Copyright 2024 by Ideal Labs, LLC
  *
@@ -31,8 +32,7 @@ use ark_ec::Group;
 use ark_std::{
     iter,
     ops::{Mul, Neg},
-    vec::Vec, 
-    rand::Rng,
+    vec::Vec,
 };
 
 #[derive(Debug)]
@@ -71,7 +71,7 @@ impl DLogProof {
     pub fn prove(
         statement: &DLogStatement, 
         u: &BigInt, 
-        x: &BigInt,
+        x: &BigInt, 
     ) -> DLogProof {
         // let r = BigInt::sample_below(&statement.params.0);
         // using A = N
@@ -111,7 +111,7 @@ impl DLogProof {
         // z = r + ex
         let z = r + e.clone() * x;
         // w = su^e mod N
-        let w = s * BigInt::mod_pow(&u, &e, &statement.ek.n);
+        let w = s * BigInt::mod_pow(u, &e, &statement.ek.n);
 
         DLogProof {
             t, z, w,
@@ -191,15 +191,13 @@ mod tests {
     use paillier::KeyGeneration;
     use paillier::Paillier;
 
-    use ark_std::test_rng;
-
     #[test]
     fn test_correct_dlog_proof() {
         // SB/A < 1/2^{k'} negl. => overwhelming chance of verifiability
 
         // // should be safe primes (not sure if there is actual attack)
         // ((G, N), (p, q))
-        let (ek, _dk) = Paillier::keypair().keys();
+        let (ek, dk) = Paillier::keypair().keys();
         // x \in [0, G]
         let x = BigInt::sample_below(&ek.n);
         let u = BigInt::sample_below(&ek.n);
@@ -221,6 +219,7 @@ mod tests {
             ciphertext: ciphertext.into(),
             dlog: dlog_bytes,
             ek: ek,
+            // params: ()
         };
         let proof = DLogProof::prove(&statement, &u, &x);
         let verification = proof.verify(&statement);

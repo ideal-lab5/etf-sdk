@@ -1,7 +1,22 @@
+/*
+ * Copyright 2024 by Ideal Labs, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 use ark_bls12_381::{Fr, G1Projective as G};
-use ark_ec::CurveGroup;
-use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use ark_ff::{UniformRand, Zero};
+use ark_serialize::CanonicalSerialize;
+use ark_ff::{BigInteger, PrimeField, UniformRand};
 use ark_poly::{
     polynomial::univariate::DensePolynomial,
     DenseUVPolynomial, Polynomial,
@@ -14,16 +29,20 @@ use ark_std::{
     rand::Rng,
     collections::BTreeMap,
 };
+use curv::arithmetic::traits::*;
 use paillier::{
+    BigInt,
     Decrypt,
     DecryptionKey,
-    EncodedCiphertext, 
-    Encrypt, 
     EncryptionKey, 
     Paillier,
+    EncryptWithChosenRandomness,
+    RawCiphertext,
+    RawPlaintext,
+    Randomness,
 };
-use crate::utils::hash_to_g1;
-use crate::encryption::aes::{interpolate};
+
+use crate::proofs::{MultiDLogProof, MultiDLogStatement};
 
 /// errors for the DPSS reshare algorithm
 #[derive(Debug)]
@@ -32,6 +51,8 @@ pub enum ACSSError {
     InvalidCiphertext,
     /// the commitment could not be verified
     InvalidCommitment,
+    /// the proof could not be verified
+    InvalidProof,
 }
 
 // A wrapper for EncryptionKey 
@@ -72,17 +93,21 @@ impl WrappedEncryptionKey {
     }
 }
 
-// no proof yet
+/// represents the data that an old committee member
+/// passes to a new one
 #[derive(Clone, PartialEq, Debug)]
 pub struct Capsule {
-    // field element where evaluation took place
+    pub ek: EncryptionKey,
+    /// field element where evaluation took place
     pub eval: Fr,
-    // an encrypted secret
-    pub v: EncodedCiphertext<Vec<u64>>,
-    // an encrypted secret (blinding)
-    pub v_hat: EncodedCiphertext<Vec<u64>>,
-    // pedersen committment
-    pub commitment: G,
+    /// an encrypted secret
+    pub enc_xu: BigInt,
+    /// an encrypted secret (blinding)
+    pub enc_xu_prime: BigInt,
+    /// pedersen committment g^x h^{x'}
+    pub dlog: G,
+    /// a NIZK PoK that the dlog is a commitment to both ciphertexts
+    pub proof: MultiDLogProof,
 }
 
 #[derive(Clone, PartialEq)]
@@ -93,14 +118,15 @@ pub struct ACSSParams {
 
 /// the high threshold asynchronous complete secret sharing struct
 pub struct HighThresholdACSS<PublicKey> {
-    params: ACSSParams,
+    // params: ACSSParams,
     _phantom: PhantomData<PublicKey>,
 }
 
 impl<PublicKey> HighThresholdACSS<PublicKey> 
     where PublicKey: Ord + Clone {
 
-    /// as a semi-trusted dealer, construct shares for the initial committee
+    /// Acting as a semi-trusted dealer, construct shares for the next committee
+    ///
     /// `params`: ACSS Params
     /// `msk`: the master secret key
     /// `msk_hat`: the blinding secret key
@@ -108,8 +134,6 @@ impl<PublicKey> HighThresholdACSS<PublicKey>
     /// `t`: The threshold (t <= n)
     /// `rng`: A random number generator
     ///
-    /// TODO:
-    /// - Encryption + ZKPoK
     pub fn produce_shares<R: Rng + Sized>(
         params: ACSSParams,
         msk: Fr, 
@@ -121,52 +145,82 @@ impl<PublicKey> HighThresholdACSS<PublicKey>
         // f(x) -> [f(0), {(1, f(1)), ..., (n, f(n))}]
         let evals: BTreeMap<Fr, Fr> = generate_shares_checked(
             msk, next_committee.len() as u8, t, &mut rng);
-        // f_hat(x) (blinding polynomial)
+        // f_hat(x) (blinding polynomial) -> [f'(0), {1, f'(1), ...}]
         let evals_hat: BTreeMap<Fr, Fr> = generate_shares_checked(
             msk_hat, next_committee.len() as u8, t, &mut rng);
-        // merge the evaluations
+        // map to merge the evaluations
         let mut result: BTreeMap<WrappedEncryptionKey, Capsule> = BTreeMap::new();
 
-        // check that evals.len == evals_hat.len == next_committe.len ?
+        // TODO: check that evals.len == evals_hat.len == next_committe.len ?
 
         for (idx, member) in next_committee.iter().enumerate() {
             let f_elem = Fr::from((idx as u8) + 1);
             // TODO: handle error
-            let u = evals.get(&f_elem).unwrap();
-            let mut u_bytes: Vec<u8> = Vec::new();
-            u.serialize_compressed(&mut u_bytes).unwrap();
+            let x = evals.get(&f_elem).unwrap();
+            let x_p = BigInt::from_bytes(&x.into_bigint().to_bytes_be());
+            // let x_bytes: Vec<u8> = x.into_bigint().to_bytes_be();
+            // x.serialize_compressed(&mut x_bytes).unwrap();
 
-            let u_bytes_64 = u_bytes.iter().map(|u| *u as u64).collect::<Vec<_>>();
+            // let x_bytes_64 = x_bytes.iter().map(|u| *u as u64).collect::<Vec<_>>();
 
-            let u_hat = evals_hat.get(&f_elem).unwrap();
-            let mut u_hat_bytes: Vec<u8> = Vec::new();
-            u_hat.serialize_compressed(&mut u_hat_bytes).unwrap();
+            let x_prime = evals_hat.get(&f_elem).unwrap();
+            let x_prime_p = BigInt::from_bytes(&x_prime.into_bigint().to_bytes_be());
 
-            let u_hat_bytes_64 = u_bytes.iter().map(|u| *u as u64).collect::<Vec<_>>();
+            // let mut x_hat_bytes: Vec<u8> = Vec::new();
+            // u_hat.serialize_compressed(&mut x_hat_bytes).unwrap();
 
+            // let x_hat_bytes_64 = x_hat_bytes.iter().map(|u| *u as u64).collect::<Vec<_>>();
+
+            // (u, u') <- [0, A]
+            let u = BigInt::sample_below(&member.clone().into_inner().n);
+            let u_prime = BigInt::sample_below(&member.clone().into_inner().n);
             // encryption
-            let v = Paillier::encrypt(&member.clone().into_inner(), u_bytes_64.as_slice());
-            let v_hat = Paillier::encrypt(&member.clone().into_inner(), u_hat_bytes_64.as_slice());
+            let enc_xu = Paillier::encrypt_with_chosen_randomness(
+                &member.clone().into_inner(), 
+                RawPlaintext::from(&x_p),
+                &Randomness(u.clone())
+            ).0.into_owned();
+            let enc_xu_prime = Paillier::encrypt_with_chosen_randomness(
+                &member.clone().into_inner(), 
+                RawPlaintext::from(&x_prime_p),
+                &Randomness(u_prime.clone())
+            ).0.into_owned();
             // TODO: ZKPoK
-            let commitment = params.g.mul(u) + params.h.mul(u_hat);
+            let dlog = params.g.mul(x) + params.h.mul(x_prime);
 
-            // let proof = MultiDLogProof::prove(
-            //     &DLogStatement {
-            //         v,
-            //         v_hat,
-            //         commitment,
-            //         &member.clone(),
-            //     },
-            //     u, u_prime,
-            // );
+            let mut g_bytes = Vec::new();
+            params.g.serialize_compressed(&mut g_bytes).unwrap();
+            let mut h_bytes = Vec::new();
+            params.h.serialize_compressed(&mut h_bytes).unwrap();
+    
+            // let dlog = selfg.mul(x_scalar) + h.mul(x_prime_scalar);
+            let mut dlog_bytes = Vec::new();
+            dlog.serialize_compressed(&mut dlog_bytes).unwrap();
+    
+
+            let statement = MultiDLogStatement {
+                g: g_bytes, 
+                h: h_bytes,
+                ciphertext: enc_xu.clone(),
+                ciphertext_prime: enc_xu_prime.clone(),
+                dlog: dlog_bytes,
+                ek: member.clone().into_inner(),
+            };
+            let proof = MultiDLogProof::prove(
+                &statement, 
+                &u, &u_prime,
+                &x_p, &x_prime_p,
+            );
 
             result.insert(
                 member.clone(),
                 Capsule {
                     eval: f_elem,
-                    v, v_hat,
-                    commitment,
-                    // proof,
+                    enc_xu, 
+                    enc_xu_prime,
+                    dlog,
+                    proof,
+                    ek: member.clone().into_inner(),
                 }
             );
         };
@@ -175,33 +229,47 @@ impl<PublicKey> HighThresholdACSS<PublicKey>
     }
 
     /// decrypt shares + authenticate
-    /// outputs (s, s_hat, commitment)
+    /// outputs the new share and its blinding share
     pub fn authenticate_shares(
         params: ACSSParams, 
         dk: DecryptionKey,
         capsule: Capsule
     ) -> Result<(Fr, Fr), ACSSError>  {
-        // TODO: degree check here
-        // decrypt v
-        // our values are really u8's casted as u64's, so we need to convert back
-        let u_bytes: Vec<u64> = Paillier::decrypt(&dk, &capsule.v);
-        let u_u8_bytes: Vec<u8> = u_bytes.iter().map(|u| *u as u8).collect::<Vec<_>>();
 
-        if let Ok(u) = Fr::deserialize_compressed(&u_u8_bytes[..]) {
-            let blinding_u_bytes: Vec<u64> = Paillier::decrypt(&dk, &capsule.v_hat);
-            let blinding_u_u8_bytes: Vec<u8> = blinding_u_bytes.iter().map(|u| *u as u8).collect::<Vec<_>>();
-            if let Ok(u_blind) = Fr::deserialize_compressed(&blinding_u_u8_bytes[..]) {
-                // TODO: verify the proof
-                // let c = params.g.mul(u.clone()) + params.h.mul(u_blind.clone());
-                // if !c.eq(&capsule.commitment.into_affine()) {
-                //     return Err(ACSSError::InvalidCommitment);
-                // }
+        // TODO: store bytes in the struct instead?
+        let mut g_bytes = Vec::new();
+        params.g.serialize_compressed(&mut g_bytes).unwrap();
+        let mut h_bytes = Vec::new();
+        params.h.serialize_compressed(&mut h_bytes).unwrap();
 
-                return Ok((u, u_blind));
-            }            
-        }
-        
-        Err(ACSSError::InvalidCiphertext)
+        let mut dlog_bytes = Vec::new();
+        capsule.dlog.serialize_compressed(&mut dlog_bytes).unwrap();
+
+        let statement = MultiDLogStatement {
+            g: g_bytes, 
+            h: h_bytes,
+            ciphertext: capsule.enc_xu.clone(),
+            ciphertext_prime: capsule.enc_xu_prime.clone(),
+            dlog: dlog_bytes,
+            ek: capsule.ek,
+        };
+
+        capsule.proof.verify(&statement)
+            .map_err(|_| ACSSError::InvalidProof)?;
+
+        let x = Paillier::decrypt(
+            &dk, 
+            RawCiphertext::from(&capsule.enc_xu)
+        ).0.into_owned();
+        let x_prime = Paillier::decrypt(
+            &dk, 
+            RawCiphertext::from(&capsule.enc_xu_prime)
+        ).0.into_owned();
+
+        let s: Fr = Fr::from_be_bytes_mod_order(&x.to_bytes());
+        let s_prime: Fr = Fr::from_be_bytes_mod_order(&x_prime.to_bytes());
+
+        Ok((s, s_prime))
     }
 }
 
@@ -215,8 +283,8 @@ pub fn generate_shares_checked<R: Rng + Sized>(
     //     return vec![(Fr::zero(), r)];
     // }
 
-    let mut coeffs: Vec<Fr> = (0..t+1).map(|i| Fr::rand(&mut rng)).collect();
-    coeffs[0] = s.clone();
+    let mut coeffs: Vec<Fr> = (0..t+1).map(|_| Fr::rand(&mut rng)).collect();
+    coeffs[0] = s;
 
     let f = DensePolynomial::<Fr>::from_coefficients_vec(coeffs);
     let mut out: BTreeMap<Fr, Fr> = BTreeMap::new();
@@ -228,18 +296,13 @@ pub fn generate_shares_checked<R: Rng + Sized>(
     out
 }
 
+#[cfg(test)]
 pub mod tests {
 
     use super::*;
     use ark_std::vec::Vec;
-    use ark_bls12_381::Fr;
-    use crate::encryption::aes::generate_secrets;
-    use rand_chacha::ChaCha20Rng;
     use ark_ec::Group;
-    use ark_std::{
-        rand::SeedableRng,
-        test_rng,
-    };
+    use ark_std::test_rng;
 
     use paillier::{BigInt, KeyGeneration, EncryptionKey};
     use ark_poly::{

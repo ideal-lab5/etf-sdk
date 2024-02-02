@@ -26,13 +26,11 @@ use crate::alloc::string::ToString;
 
 use ark_bls12_381::{Fr, G1Projective as G};
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
-use ark_ff::{BigInteger, PrimeField, UniformRand};
-use ark_ec::Group;
+use ark_ff::{BigInteger, PrimeField};
 use ark_std::{
     iter,
     ops::{Mul, Neg},
-    vec::Vec, 
-    rand::Rng,
+    vec::Vec,
 };
 
 #[derive(Debug)]
@@ -47,8 +45,8 @@ pub enum Error {
 /// a discrete log is a commitment to the preimage of a ciphertext
 ///
 /// https://eprint.iacr.org/2022/971.pdf
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct DLogProof {
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct MultiDLogProof {
     t: (Vec<u8>, BigInt, BigInt),
     z: BigInt,
     z_prime: BigInt,
@@ -57,7 +55,7 @@ struct DLogProof {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DLogStatement {
+pub struct MultiDLogStatement {
     /// a (serialized) generator of the elliptic curve group
     pub g: Vec<u8>,
     /// a (serialized) generator of the elliptic curve group
@@ -71,15 +69,15 @@ pub struct DLogStatement {
     pub ek: EncryptionKey,
 }
 
-impl DLogProof {
+impl MultiDLogProof {
 
     pub fn prove(
-        statement: &DLogStatement, 
+        statement: &MultiDLogStatement, 
         u: &BigInt, 
         u_prime: &BigInt,
         x: &BigInt,
         x_prime: &BigInt,
-    ) -> DLogProof {
+    ) -> MultiDLogProof {
         // let r = BigInt::sample_below(&statement.params.0);
         // using A = N
         let modulus = BigInt::from_bytes(Fr::MODULUS.to_bytes_be().as_slice());
@@ -118,8 +116,10 @@ impl DLogProof {
             .chain(iter::once(statement.ek.n.clone().to_string().as_bytes())) // G
             .chain(iter::once(statement.dlog.as_slice())) // y = g^x
             .chain(iter::once(statement.ciphertext.to_string().as_bytes())) // Y = G^x u^N
+            .chain(iter::once(statement.ciphertext_prime.to_string().as_bytes())) // Y = G^x u^N
             .chain(iter::once(p_bytes.as_slice())) // g^r mod p => commitment to r
             .chain(iter::once(q.to_string().as_bytes())) // G^r s^N mod N^2 = enc(r;s)
+            .chain(iter::once(q_prime.to_string().as_bytes())) // G^r s^N mod N^2 = enc(r;s)
         );
 
         // z = r + ex
@@ -128,20 +128,18 @@ impl DLogProof {
         let z_prime = r_prime + e.clone() * x_prime;
 
         // w = su^e mod N
-        let w = s * BigInt::mod_pow(&u, &e, &statement.ek.n);
+        let w = s * BigInt::mod_pow(u, &e, &statement.ek.n);
         // w' = s'u'^e mod N
-        let w_prime = s_prime * BigInt::mod_pow(&u_prime, &e, &statement.ek.n);
+        let w_prime = s_prime * BigInt::mod_pow(u_prime, &e, &statement.ek.n);
 
-        DLogProof {
+        MultiDLogProof {
             t, z, z_prime, w, w_prime,
         }
     }
 
     /// verify the proof
-    pub fn verify(&self, statement: &DLogStatement) -> Result<(), Error> {
-
-        // 1. Check Z < A
-        // 2. Check Z' < A
+    pub fn verify(&self, statement: &MultiDLogStatement) -> Result<(), Error> {
+        // 1. Check z < A && z' < A
         if self.z >= (statement.ek.n.clone() * statement.ek.nn.clone()) ||
         self.z_prime >= (statement.ek.n.clone() * statement.ek.nn.clone()) {
             return Err(Error::InvalidZ);
@@ -157,8 +155,10 @@ impl DLogProof {
             .chain(iter::once(statement.ek.n.clone().to_string().as_bytes())) // G I think?
             .chain(iter::once(statement.dlog.as_slice())) // y = g^x
             .chain(iter::once(statement.ciphertext.to_string().as_bytes())) // Y = G^x u^N
+            .chain(iter::once(statement.ciphertext_prime.to_string().as_bytes())) // Y = G^x u^N
             .chain(iter::once(self.t.0.as_slice())) // g^r mod p => commitment to r
             .chain(iter::once(self.t.1.to_string().as_bytes())) // G^r s^N mod N^2 = enc(r;s)
+            .chain(iter::once(self.t.2.to_string().as_bytes())) // G^r s^N mod N^2 = enc(r;s)
         );
 
         let e_scalar = Fr::from_be_bytes_mod_order(&e.to_bytes());
@@ -253,6 +253,8 @@ mod tests {
     use paillier::KeyGeneration;
     use paillier::Paillier;
 
+    use ark_ec::Group;
+    use ark_ff::UniformRand;
     use ark_std::test_rng;
 
     #[test]
@@ -297,7 +299,7 @@ mod tests {
 
         // A >= B * S + k'
         // currently using A = N
-        let statement = DLogStatement {
+        let statement = MultiDLogStatement {
             g: g_bytes, 
             h: h_bytes,
             ciphertext: enc_xu.into(),
@@ -305,7 +307,7 @@ mod tests {
             dlog: dlog_bytes,
             ek: ek,
         };
-        let proof = DLogProof::prove(
+        let proof = MultiDLogProof::prove(
             &statement, 
             &u, &u_prime,
             &x, &x_prime,
