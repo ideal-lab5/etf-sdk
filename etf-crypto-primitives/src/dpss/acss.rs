@@ -58,7 +58,7 @@ pub enum ACSSError {
 }
 
 // A wrapper for EncryptionKey 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct WrappedEncryptionKey(pub EncryptionKey);
 
 impl Eq for WrappedEncryptionKey {}
