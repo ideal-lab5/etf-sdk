@@ -118,7 +118,7 @@ pub struct ACSSParams {
 }
 
 impl ACSSParams {
-    fn rand<R: Rng + Sized>(mut rng: R) -> Self {
+    pub fn rand<R: Rng + Sized>(mut rng: R) -> Self {
         Self {
             g: G::generator(),
             h: G::rand(&mut rng)
