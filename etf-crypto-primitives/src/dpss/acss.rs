@@ -21,6 +21,7 @@ use ark_poly::{
     polynomial::univariate::DensePolynomial,
     DenseUVPolynomial, Polynomial,
 };
+use ark_ec::Group;
 use ark_std::{
     cmp::Ordering,
     marker::PhantomData,
@@ -114,6 +115,15 @@ pub struct Capsule {
 pub struct ACSSParams {
     g: G,
     h: G,
+}
+
+impl ACSSParams {
+    fn rand<R: Rng + Sized>(mut rng: R) -> Self {
+        Self {
+            g: G::generator(),
+            h: G::rand(&mut rng)
+        }
+    }
 }
 
 /// the high threshold asynchronous complete secret sharing struct
