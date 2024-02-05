@@ -24,7 +24,6 @@ use ark_poly::{
 use ark_ec::Group;
 use ark_std::{
     cmp::Ordering,
-    marker::PhantomData,
     ops::Mul,
     vec::Vec, 
     rand::Rng,
@@ -128,13 +127,9 @@ impl ACSSParams {
 }
 
 /// the high threshold asynchronous complete secret sharing struct
-pub struct HighThresholdACSS<PublicKey> {
-    // params: ACSSParams,
-    _phantom: PhantomData<PublicKey>,
-}
+pub struct HighThresholdACSS { }
 
-impl<PublicKey> HighThresholdACSS<PublicKey> 
-    where PublicKey: Ord + Clone {
+impl HighThresholdACSS {
 
     /// Acting as a semi-trusted dealer, construct shares for the next committee
     ///
