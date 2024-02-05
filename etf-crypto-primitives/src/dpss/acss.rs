@@ -43,6 +43,7 @@ use paillier::{
     Randomness,
 };
 
+use serde::{Deserialize, Serialize};
 use crate::proofs::{MultiDLogProof, MultiDLogStatement};
 
 /// errors for the DPSS reshare algorithm
@@ -96,17 +97,17 @@ impl WrappedEncryptionKey {
 
 /// represents the data that an old committee member
 /// passes to a new one
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Capsule {
     pub ek: EncryptionKey,
-    /// field element where evaluation took place
-    pub eval: Fr,
+    // /// field element where evaluation took place
+    // pub eval: Vec<u8>,
     /// an encrypted secret
     pub enc_xu: BigInt,
     /// an encrypted secret (blinding)
     pub enc_xu_prime: BigInt,
-    /// pedersen committment g^x h^{x'}
-    pub dlog: G,
+    /// pedersen committment bytes: g^x h^{x'} 
+    pub dlog: Vec<u8>,
     /// a NIZK PoK that the dlog is a commitment to both ciphertexts
     pub proof: MultiDLogProof,
 }
@@ -222,13 +223,15 @@ impl<PublicKey> HighThresholdACSS<PublicKey>
                 &x_p, &x_prime_p,
             );
 
+            let dlog_bytes = crate::utils::convert_to_bytes::<G, 48>(dlog).to_vec();
+
             result.insert(
                 member.clone(),
                 Capsule {
-                    eval: f_elem,
+                    // eval: eval_bytes,
                     enc_xu, 
                     enc_xu_prime,
-                    dlog,
+                    dlog: dlog_bytes,
                     proof,
                     ek: member.clone().into_inner(),
                 }
@@ -252,15 +255,15 @@ impl<PublicKey> HighThresholdACSS<PublicKey>
         let mut h_bytes = Vec::new();
         params.h.serialize_compressed(&mut h_bytes).unwrap();
 
-        let mut dlog_bytes = Vec::new();
-        capsule.dlog.serialize_compressed(&mut dlog_bytes).unwrap();
+        // let mut dlog_bytes = Vec::new();
+        // capsule.dlog.serialize_compressed(&mut dlog_bytes).unwrap();
 
         let statement = MultiDLogStatement {
             g: g_bytes, 
             h: h_bytes,
             ciphertext: capsule.enc_xu.clone(),
             ciphertext_prime: capsule.enc_xu_prime.clone(),
-            dlog: dlog_bytes,
+            dlog: capsule.dlog,
             ek: capsule.ek,
         };
 
