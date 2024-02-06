@@ -113,13 +113,21 @@ pub struct Capsule {
     pub proof: MultiDLogProof,
 }
 
-impl Capsule {
-    pub fn encode(&self) -> Result<Vec<u8>, serde_cbor::Error> {
-        serde_cbor::to_vec(self)
+impl codec::Encode for Capsule {
+    fn encode(&self) -> Vec<u8> {
+        serde_cbor::to_vec(self).unwrap_or(Vec::new())
     }
+}
 
-    pub fn decode(data: &[u8]) -> Result<Self, serde_cbor::Error> {
-        serde_cbor::from_slice(data)
+impl Decode for Capsule {
+    fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
+        // Convert input to byte slice
+        let mut bytes = Vec::new();
+        let _ = input.read(&mut bytes[..]).unwrap();
+        
+        let c: Capsule = serde_cbor::from_slice(&bytes)
+            .map_err(|_| codec::Error::from("Invalid bytes"))?;
+        Ok(c)
     }
 }
 
