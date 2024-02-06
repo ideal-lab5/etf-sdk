@@ -114,6 +114,8 @@ pub struct Capsule {
     pub proof: MultiDLogProof,
 }
 
+impl codec::EncodeLike for Capsule {}
+
 impl codec::Encode for Capsule {
     fn encode(&self) -> Vec<u8> {
         serde_cbor::to_vec(self).unwrap_or(Vec::new())
@@ -150,6 +152,19 @@ impl codec::MaxEncodedLen for Capsule {
         // // Sum all the lengths
         // max_ek_n_len + max_enc_xu_len + max_enc_xu_prime_len + max_dlog_len + max_proof_len
     }
+}
+
+impl TypeInfo for Capsule {
+	type Identity = Self;
+
+	fn type_info() -> scale_info::Type {
+		scale_info::Type::builder()
+			.path(scale_info::Path::new("Capsule", module_path!()))
+			.composite(
+				scale_info::build::Fields::unnamed()
+					.field(|f| f.ty::<u8>().docs(&["Raw capsule byte, encodes encrypted shares and nizk pok"])),
+			)
+	}
 }
 
 #[derive(Clone, PartialEq)]
