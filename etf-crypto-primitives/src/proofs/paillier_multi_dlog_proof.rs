@@ -65,8 +65,28 @@ pub struct MultiDLogStatement {
     pub ciphertext_prime: BigInt,
     /// (serialized) y = g ^ x mod p \in \mathbb{G}
     pub dlog: Vec<u8>,
-    /// a Paillier encryption key
-    pub ek: EncryptionKey,
+    /// a Paillier encryption key's 'n' value
+    pub ek_n: BigInt,
+}
+
+impl MultiDLogProof {
+    pub fn encode(&self) -> Result<Vec<u8>, serde_cbor::Error> {
+        serde_cbor::to_vec(self)
+    }
+
+    pub fn decode(data: &[u8]) -> Result<Self, serde_cbor::Error> {
+        serde_cbor::from_slice(data)
+    }
+}
+
+impl MultiDLogStatement {
+    pub fn encode(&self) -> Result<Vec<u8>, serde_cbor::Error> {
+        serde_cbor::to_vec(self)
+    }
+
+    pub fn decode(data: &[u8]) -> Result<Self, serde_cbor::Error> {
+        serde_cbor::from_slice(data)
+    }
 }
 
 impl MultiDLogProof {
@@ -82,8 +102,9 @@ impl MultiDLogProof {
         // using A = N
         let modulus = BigInt::from_bytes(Fr::MODULUS.to_bytes_be().as_slice());
         // r in [0, A = N^3]
-        let r = BigInt::sample_below(&(statement.ek.n.clone() * statement.ek.nn.clone()));
-        let r_prime = BigInt::sample_below(&(statement.ek.n.clone() * statement.ek.nn.clone()));
+        let ek = EncryptionKey::from(&statement.ek_n);
+        let r = BigInt::sample_below(&(ek.n.clone() * ek.nn.clone()));
+        let r_prime = BigInt::sample_below(&(ek.n.clone() * ek.nn.clone()));
         // s in [0, p - 1]
         let s = BigInt::sample_below(&(modulus.clone() - 1));        
         let s_prime = BigInt::sample_below(&(modulus - 1));
@@ -99,12 +120,12 @@ impl MultiDLogProof {
         p.serialize_compressed(&mut p_bytes).unwrap();
         // Y' = G^r s^N mod N^2 = enc(r;s)
         let q = Paillier::encrypt_with_chosen_randomness(
-            &statement.ek,
+            &ek,
             RawPlaintext::from(r.clone()),
             &Randomness(s.clone())
         ).0.into_owned();
         let q_prime = Paillier::encrypt_with_chosen_randomness(
-            &statement.ek,
+            &ek,
             RawPlaintext::from(r_prime.clone()),
             &Randomness(s_prime.clone())
         ).0.into_owned();
@@ -113,7 +134,7 @@ impl MultiDLogProof {
         let e = compute_digest(
             iter::once(statement.g.as_slice()) // g
             .chain(iter::once(statement.h.as_slice())) // h
-            .chain(iter::once(statement.ek.n.clone().to_string().as_bytes())) // G
+            .chain(iter::once(ek.n.clone().to_string().as_bytes())) // G
             .chain(iter::once(statement.dlog.as_slice())) // y = g^x
             .chain(iter::once(statement.ciphertext.to_string().as_bytes())) // Y = G^x u^N
             .chain(iter::once(statement.ciphertext_prime.to_string().as_bytes())) // Y = G^x u^N
@@ -128,9 +149,9 @@ impl MultiDLogProof {
         let z_prime = r_prime + e.clone() * x_prime;
 
         // w = su^e mod N
-        let w = s * BigInt::mod_pow(u, &e, &statement.ek.n);
+        let w = s * BigInt::mod_pow(u, &e, &ek.n);
         // w' = s'u'^e mod N
-        let w_prime = s_prime * BigInt::mod_pow(u_prime, &e, &statement.ek.n);
+        let w_prime = s_prime * BigInt::mod_pow(u_prime, &e, &ek.n);
 
         MultiDLogProof {
             t, z, z_prime, w, w_prime,
@@ -139,9 +160,10 @@ impl MultiDLogProof {
 
     /// verify the proof
     pub fn verify(&self, statement: &MultiDLogStatement) -> Result<(), Error> {
+        let ek = EncryptionKey::from(&statement.ek_n);
         // 1. Check z < A && z' < A
-        if self.z >= (statement.ek.n.clone() * statement.ek.nn.clone()) ||
-        self.z_prime >= (statement.ek.n.clone() * statement.ek.nn.clone()) {
+        if self.z >= (ek.n.clone() * ek.nn.clone()) ||
+        self.z_prime >= (ek.n.clone() * ek.nn.clone()) {
             return Err(Error::InvalidZ);
         }
 
@@ -152,7 +174,7 @@ impl MultiDLogProof {
         let e: BigInt = compute_digest(
             iter::once(statement.g.as_slice()) // g
             .chain(iter::once(statement.h.as_slice())) // h
-            .chain(iter::once(statement.ek.n.clone().to_string().as_bytes())) // G I think?
+            .chain(iter::once(ek.n.clone().to_string().as_bytes())) // G I think?
             .chain(iter::once(statement.dlog.as_slice())) // y = g^x
             .chain(iter::once(statement.ciphertext.to_string().as_bytes())) // Y = G^x u^N
             .chain(iter::once(statement.ciphertext_prime.to_string().as_bytes())) // Y = G^x u^N
@@ -182,7 +204,7 @@ impl MultiDLogProof {
             self.w.clone(), 
             &statement.ciphertext,
             &self.t.1,
-            statement.ek.clone(),
+            ek.clone(),
         )?;
 
         // 4. CHECK t.2 = enc(r';s') == enc(z',w') Y'^{-e} mod N^2   
@@ -192,7 +214,7 @@ impl MultiDLogProof {
             self.w_prime.clone(), 
             &statement.ciphertext_prime,
             &self.t.2,
-            statement.ek.clone(),
+            ek.clone(),
         )?;
 
         Ok(())
@@ -305,7 +327,7 @@ mod tests {
             ciphertext: enc_xu.into(),
             ciphertext_prime: enc_xu_prime.into(),
             dlog: dlog_bytes,
-            ek: ek,
+            ek_n: ek.n,
         };
         let proof = MultiDLogProof::prove(
             &statement, 

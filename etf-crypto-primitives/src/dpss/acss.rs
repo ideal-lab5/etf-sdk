@@ -29,6 +29,7 @@ use ark_std::{
     rand::Rng,
     collections::BTreeMap,
 };
+use codec::{Decode, Encode};
 use curv::arithmetic::traits::*;
 use paillier::{
     BigInt,
@@ -98,7 +99,8 @@ impl WrappedEncryptionKey {
 /// passes to a new one
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Capsule {
-    pub ek: EncryptionKey,
+    /// the 'n' value of the encryption key (EK = (n, n^2))
+    pub ek_n: BigInt,
     // /// field element where evaluation took place
     // pub eval: Vec<u8>,
     /// an encrypted secret
@@ -109,6 +111,16 @@ pub struct Capsule {
     pub dlog: Vec<u8>,
     /// a NIZK PoK that the dlog is a commitment to both ciphertexts
     pub proof: MultiDLogProof,
+}
+
+impl Capsule {
+    pub fn encode(&self) -> Result<Vec<u8>, serde_cbor::Error> {
+        serde_cbor::to_vec(self)
+    }
+
+    pub fn decode(data: &[u8]) -> Result<Self, serde_cbor::Error> {
+        serde_cbor::from_slice(data)
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -202,7 +214,6 @@ impl HighThresholdACSS {
             // let dlog = selfg.mul(x_scalar) + h.mul(x_prime_scalar);
             let mut dlog_bytes = Vec::new();
             dlog.serialize_compressed(&mut dlog_bytes).unwrap();
-    
 
             let statement = MultiDLogStatement {
                 g: g_bytes, 
@@ -210,7 +221,7 @@ impl HighThresholdACSS {
                 ciphertext: enc_xu.clone(),
                 ciphertext_prime: enc_xu_prime.clone(),
                 dlog: dlog_bytes,
-                ek: member.clone().into_inner(),
+                ek_n: member.clone().into_inner().n,
             };
             let proof = MultiDLogProof::prove(
                 &statement, 
@@ -228,7 +239,7 @@ impl HighThresholdACSS {
                     enc_xu_prime,
                     dlog: dlog_bytes,
                     proof,
-                    ek: member.clone().into_inner(),
+                    ek_n: member.clone().into_inner().n,
                 }
             );
         };
@@ -250,16 +261,13 @@ impl HighThresholdACSS {
         let mut h_bytes = Vec::new();
         params.h.serialize_compressed(&mut h_bytes).unwrap();
 
-        // let mut dlog_bytes = Vec::new();
-        // capsule.dlog.serialize_compressed(&mut dlog_bytes).unwrap();
-
         let statement = MultiDLogStatement {
             g: g_bytes, 
             h: h_bytes,
             ciphertext: capsule.enc_xu.clone(),
             ciphertext_prime: capsule.enc_xu_prime.clone(),
             dlog: capsule.dlog,
-            ek: capsule.ek,
+            ek_n: capsule.ek_n,
         };
 
         capsule.proof.verify(&statement)
@@ -281,16 +289,9 @@ impl HighThresholdACSS {
     }
 }
 
-
 pub fn generate_shares_checked<R: Rng + Sized>(
     s: Fr, n: u8, t: u8, mut rng: R
 ) -> BTreeMap<Fr, Fr> {
-    
-    // if n == 1 {
-    //     let r = Fr::rand(&mut rng);
-    //     return vec![(Fr::zero(), r)];
-    // }
-
     let mut coeffs: Vec<Fr> = (0..t+1).map(|_| Fr::rand(&mut rng)).collect();
     coeffs[0] = s;
 
@@ -349,7 +350,7 @@ pub mod tests {
         let msk_hat = Fr::rand(&mut test_rng());
 
         let initial_committee_shares: BTreeMap<WrappedEncryptionKey, Capsule> = 
-            HighThresholdACSS::<WrappedEncryptionKey>::produce_shares(
+            HighThresholdACSS::produce_shares(
                 params.clone(), 
                 msk, 
                 msk_hat, 
@@ -367,12 +368,12 @@ pub mod tests {
                 .get(&WrappedEncryptionKey(c.0.clone()))
                 .unwrap();
             // authenticate + decrypt shares
-            let (u, u_hat) = HighThresholdACSS::<WrappedEncryptionKey>::authenticate_shares(
+            let (u, u_hat) = HighThresholdACSS::authenticate_shares(
                 params.clone(), c.1.clone(), member_secrets.clone(),
             ).unwrap();
             // and they each create a resharing of their secrets
             let next_committee_resharing: BTreeMap<WrappedEncryptionKey, Capsule> = 
-                HighThresholdACSS::<WrappedEncryptionKey>::produce_shares(
+                HighThresholdACSS::produce_shares(
                     params.clone(),
                     u,
                     u_hat, 
@@ -405,7 +406,7 @@ pub mod tests {
                     .get(&WrappedEncryptionKey(ek.clone()))
                     .unwrap();
                 // authenticate and decrypt
-                let (u, u_hat) = HighThresholdACSS::<WrappedEncryptionKey>::authenticate_shares(
+                let (u, u_hat) = HighThresholdACSS::authenticate_shares(
                     params.clone(),
                     dk.clone(),
                     capsule.clone(),
