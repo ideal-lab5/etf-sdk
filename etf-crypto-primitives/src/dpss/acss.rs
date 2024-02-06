@@ -29,7 +29,8 @@ use ark_std::{
     rand::Rng,
     collections::BTreeMap,
 };
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
+use scale_info::TypeInfo;
 use curv::arithmetic::traits::*;
 use paillier::{
     BigInt,
@@ -119,7 +120,7 @@ impl codec::Encode for Capsule {
     }
 }
 
-impl Decode for Capsule {
+impl codec::Decode for Capsule {
     fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
         // Convert input to byte slice
         let mut bytes = Vec::new();
@@ -128,6 +129,26 @@ impl Decode for Capsule {
         let c: Capsule = serde_cbor::from_slice(&bytes)
             .map_err(|_| codec::Error::from("Invalid bytes"))?;
         Ok(c)
+    }
+}
+
+impl codec::MaxEncodedLen for Capsule {
+    fn max_encoded_len() -> usize {
+        1
+        // // Calculate the maximum encoded length of the struct
+        // // This will be the sum of the maximum encoded lengths of its fields
+        
+        // // For BigInt and Vec<u8>, it's the length of the vector plus the length prefix
+        // let max_ek_n_len = <Vec<u8>>::max_encoded_len();
+        // let max_enc_xu_len = <Vec<u8>>::max_encoded_len();
+        // let max_enc_xu_prime_len = <Vec<u8>>::max_encoded_len();
+        // let max_dlog_len = <Vec<u8>>::max_encoded_len();
+        
+        // // For MultiDLogProof, it's the maximum encoded length of the struct
+        // let max_proof_len = <Vec<u8>>::max_encoded_len();
+        
+        // // Sum all the lengths
+        // max_ek_n_len + max_enc_xu_len + max_enc_xu_prime_len + max_dlog_len + max_proof_len
     }
 }
 

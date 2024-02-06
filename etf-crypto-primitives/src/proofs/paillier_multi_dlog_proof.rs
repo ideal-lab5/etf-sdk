@@ -69,25 +69,76 @@ pub struct MultiDLogStatement {
     pub ek_n: BigInt,
 }
 
-impl MultiDLogProof {
-    pub fn encode(&self) -> Result<Vec<u8>, serde_cbor::Error> {
-        serde_cbor::to_vec(self)
-    }
 
-    pub fn decode(data: &[u8]) -> Result<Self, serde_cbor::Error> {
-        serde_cbor::from_slice(data)
-    }
-}
+// impl ark_std::ops::Deref for MultiDLogStatement {
+//     type Target = [u8];
 
-impl MultiDLogStatement {
-    pub fn encode(&self) -> Result<Vec<u8>, serde_cbor::Error> {
-        serde_cbor::to_vec(self)
-    }
+//     fn deref(&self) -> &[u8] {
+//         // Serialize each field and concatenate them into a single Vec<u8>
+//         let mut result = Vec::new();
+//         result.extend_from_slice(&self.g);
+//         result.extend_from_slice(&self.h);
+//         result.extend_from_slice(&self.ciphertext.to_string().as_bytes());
+//         result.extend_from_slice(&self.ciphertext_prime.to_string().as_bytes());
+//         result.extend_from_slice(&self.dlog);
+//         result.extend_from_slice(&self.ek_n.to_string().as_bytes());
+//         // &result.clone()[..]
+//         // &Vec::new()
+//         // let out = result.clone();
+//         // &out[..]
+//         self.g
+//     }
+// }
 
-    pub fn decode(data: &[u8]) -> Result<Self, serde_cbor::Error> {
-        serde_cbor::from_slice(data)
-    }
-}
+// impl codec::WrapperTypeEncode for MultiDLogStatement {}
+
+// impl codec::MaxEncodedLen for MultiDLogStatement {
+//     fn max_encoded_len() -> usize {
+//         1
+//         // let g_len = <Vec<u8>>::max_encoded_len();
+//         // let h_len = <Vec<u8>>::max_encoded_len();
+//         // let bigint_len = BigInt::max_encoded_len();
+
+//         // // Assuming the encoding format uses length prefixes,
+//         // // add the length of each field plus the length of their length prefixes
+//         // g_len + h_len + bigint_len * 2 // For ciphertext and ek_n
+//         //     + 4 // Additional overhead for separators or length prefixes
+//     }
+// }
+
+// impl codec::Encode for MultiDLogProof {
+//     fn encode(&self) -> Vec<u8> {
+//         serde_cbor::to_vec(self).unwrap_or(Vec::new())
+//     }
+// }
+
+// impl codec::Decode for MultiDLogProof {
+//     fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
+//         // Convert input to byte slice
+//         let mut bytes = Vec::new();
+//         let _ = input.read(&mut bytes[..]).unwrap();
+//         let c: MultiDLogProof = serde_cbor::from_slice(&bytes)
+//             .map_err(|_| codec::Error::from("Invalid bytes"))?;
+//         Ok(c)
+//     }
+// }
+
+// impl codec::Encode for MultiDLogStatement {
+//     fn encode(&self) -> Vec<u8> {
+//         serde_cbor::to_vec(self).unwrap_or(Vec::new())
+//     }
+// }
+
+// impl codec::Decode for MultiDLogStatement {
+//     fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
+//         // Convert input to byte slice
+//         let mut bytes = Vec::new();
+//         let _ = input.read(&mut bytes[..]).unwrap();
+//         let c: MultiDLogStatement = serde_cbor::from_slice(&bytes)
+//             .map_err(|_| codec::Error::from("Invalid bytes"))?;
+//         Ok(c)
+//     }
+// }
 
 impl MultiDLogProof {
 
