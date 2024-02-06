@@ -29,7 +29,6 @@ use ark_std::{
     rand::Rng,
     collections::BTreeMap,
 };
-use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use curv::arithmetic::traits::*;
 use paillier::{
@@ -203,7 +202,7 @@ impl HighThresholdACSS {
         next_committee: &[WrappedEncryptionKey],
         t: u8,
         mut rng: R,
-    ) -> BTreeMap<WrappedEncryptionKey, Capsule> {
+    ) -> Vec<Capsule> {
         // f(x) -> [f(0), {(1, f(1)), ..., (n, f(n))}]
         let evals: BTreeMap<Fr, Fr> = generate_shares_checked(
             msk, next_committee.len() as u8, t, &mut rng);
@@ -211,7 +210,7 @@ impl HighThresholdACSS {
         let evals_hat: BTreeMap<Fr, Fr> = generate_shares_checked(
             msk_hat, next_committee.len() as u8, t, &mut rng);
         // map to merge the evaluations
-        let mut result: BTreeMap<WrappedEncryptionKey, Capsule> = BTreeMap::new();
+        let mut result: Vec<Capsule> = Vec::new();
 
         // TODO: check that evals.len == evals_hat.len == next_committe.len ?
 
@@ -275,8 +274,7 @@ impl HighThresholdACSS {
 
             let dlog_bytes = crate::utils::convert_to_bytes::<G, 48>(dlog).to_vec();
 
-            result.insert(
-                member.clone(),
+            result.push(
                 Capsule {
                     // eval: eval_bytes,
                     enc_xu, 
@@ -393,7 +391,7 @@ pub mod tests {
         let msk = Fr::rand(&mut test_rng());
         let msk_hat = Fr::rand(&mut test_rng());
 
-        let initial_committee_shares: BTreeMap<WrappedEncryptionKey, Capsule> = 
+        let initial_committee_shares: Vec<Capsule> = 
             HighThresholdACSS::produce_shares(
                 params.clone(), 
                 msk, 
@@ -405,18 +403,16 @@ pub mod tests {
 
         // simulate a public broadcast channel
         let mut simulated_broadcast: 
-            BTreeMap<WrappedEncryptionKey, BTreeMap<WrappedEncryptionKey, Capsule>> = BTreeMap::new();
+            BTreeMap<WrappedEncryptionKey, Vec<Capsule>> = BTreeMap::new();
         // each member of the initial committee 'owns' a secret (identified by matching indices)
-        initial_committee_keys.iter().for_each(|c| {
-            let member_secrets = initial_committee_shares
-                .get(&WrappedEncryptionKey(c.0.clone()))
-                .unwrap();
+        initial_committee_keys.iter().enumerate().for_each(|(idx, c)| {
+            let member_secrets = &initial_committee_shares[idx];
             // authenticate + decrypt shares
             let (u, u_hat) = HighThresholdACSS::authenticate_shares(
                 params.clone(), c.1.clone(), member_secrets.clone(),
             ).unwrap();
             // and they each create a resharing of their secrets
-            let next_committee_resharing: BTreeMap<WrappedEncryptionKey, Capsule> = 
+            let next_committee_resharing: Vec <Capsule> = 
                 HighThresholdACSS::produce_shares(
                     params.clone(),
                     u,
@@ -425,7 +421,7 @@ pub mod tests {
                     next_committee_threshold, 
                     test_rng(),
             );
-            assert!(next_committee_resharing.keys().len().eq(&next_committee.len()));
+            assert!(next_committee_resharing.len().eq(&next_committee.len()));
             simulated_broadcast.insert(
                 WrappedEncryptionKey(c.0.clone()), 
                 next_committee_resharing,
@@ -438,17 +434,19 @@ pub mod tests {
         // now, next committee members verify + derive
         next_committee_keys.iter().for_each(|(ek, dk)| {
             // collect each new member's shares from the old committee
-            // let mut my_shares: Vec<(Fr, Fr)> = Vec::new();
-
             let mut coeffs: Vec<Fr> = Vec::new();
             let mut blinding_coeffs: Vec<Fr> = Vec::new();
 
-            initial_committee.iter().for_each(|old_member| {
+            initial_committee.iter().enumerate().for_each(|(idx, old_member)| {
                 // get the share they gave us
-                let capsule = simulated_broadcast.get(old_member)
-                    .unwrap()
-                    .get(&WrappedEncryptionKey(ek.clone()))
-                    .unwrap();
+                let capsule = simulated_broadcast.get(old_member).unwrap()
+                    .iter().filter(|m| m.ek_n.eq(&ek.n))
+                    .collect::<Vec<_>>()[0];
+                
+                // [idx];
+
+                // //
+
                 // authenticate and decrypt
                 let (u, u_hat) = HighThresholdACSS::authenticate_shares(
                     params.clone(),
