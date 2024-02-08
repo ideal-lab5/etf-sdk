@@ -29,7 +29,7 @@ use ark_std::{
     rand::Rng,
     collections::BTreeMap,
 };
-// use scale_info::TypeInfo;
+use scale_info::TypeInfo;
 use curv::arithmetic::traits::*;
 use paillier::{
     BigInt,
@@ -113,58 +113,58 @@ pub struct Capsule {
     pub proof: MultiDLogProof,
 }
 
-// impl codec::EncodeLike for Capsule {}
+impl codec::EncodeLike for Capsule {}
 
-// impl codec::Encode for Capsule {
-//     fn encode(&self) -> Vec<u8> {
-//         serde_cbor::to_vec(self).unwrap_or(Vec::new())
-//     }
-// }
+impl codec::Encode for Capsule {
+    fn encode(&self) -> Vec<u8> {
+        serde_cbor::to_vec(self).unwrap_or(Vec::new())
+    }
+}
 
-// impl codec::Decode for Capsule {
-//     fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
-//         // Convert input to byte slice
-//         let mut bytes = Vec::new();
-//         let _ = input.read(&mut bytes[..]).unwrap();
+impl codec::Decode for Capsule {
+    fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
+        // Convert input to byte slice
+        let mut bytes = Vec::new();
+        let _ = input.read(&mut bytes[..]).unwrap();
         
-//         let c: Capsule = serde_cbor::from_slice(&bytes)
-//             .map_err(|_| codec::Error::from("Invalid bytes"))?;
-//         Ok(c)
-//     }
-// }
+        let c: Capsule = serde_cbor::from_slice(&bytes)
+            .map_err(|_| codec::Error::from("Invalid bytes"))?;
+        Ok(c)
+    }
+}
 
-// impl codec::MaxEncodedLen for Capsule {
-//     fn max_encoded_len() -> usize {
-//         1
-//         // // Calculate the maximum encoded length of the struct
-//         // // This will be the sum of the maximum encoded lengths of its fields
+impl codec::MaxEncodedLen for Capsule {
+    fn max_encoded_len() -> usize {
+        1
+        // // Calculate the maximum encoded length of the struct
+        // // This will be the sum of the maximum encoded lengths of its fields
         
-//         // // For BigInt and Vec<u8>, it's the length of the vector plus the length prefix
-//         // let max_ek_n_len = <Vec<u8>>::max_encoded_len();
-//         // let max_enc_xu_len = <Vec<u8>>::max_encoded_len();
-//         // let max_enc_xu_prime_len = <Vec<u8>>::max_encoded_len();
-//         // let max_dlog_len = <Vec<u8>>::max_encoded_len();
+        // // For BigInt and Vec<u8>, it's the length of the vector plus the length prefix
+        // let max_ek_n_len = <Vec<u8>>::max_encoded_len();
+        // let max_enc_xu_len = <Vec<u8>>::max_encoded_len();
+        // let max_enc_xu_prime_len = <Vec<u8>>::max_encoded_len();
+        // let max_dlog_len = <Vec<u8>>::max_encoded_len();
         
-//         // // For MultiDLogProof, it's the maximum encoded length of the struct
-//         // let max_proof_len = <Vec<u8>>::max_encoded_len();
+        // // For MultiDLogProof, it's the maximum encoded length of the struct
+        // let max_proof_len = <Vec<u8>>::max_encoded_len();
         
-//         // // Sum all the lengths
-//         // max_ek_n_len + max_enc_xu_len + max_enc_xu_prime_len + max_dlog_len + max_proof_len
-//     }
-// }
+        // // Sum all the lengths
+        // max_ek_n_len + max_enc_xu_len + max_enc_xu_prime_len + max_dlog_len + max_proof_len
+    }
+}
 
-// impl TypeInfo for Capsule {
-// 	type Identity = Self;
+impl TypeInfo for Capsule {
+	type Identity = Self;
 
-// 	fn type_info() -> scale_info::Type {
-// 		scale_info::Type::builder()
-// 			.path(scale_info::Path::new("Capsule", module_path!()))
-// 			.composite(
-// 				scale_info::build::Fields::unnamed()
-// 					.field(|f| f.ty::<u8>().docs(&["Raw capsule byte, encodes encrypted shares and nizk pok"])),
-// 			)
-// 	}
-// }
+	fn type_info() -> scale_info::Type {
+		scale_info::Type::builder()
+			.path(scale_info::Path::new("Capsule", module_path!()))
+			.composite(
+				scale_info::build::Fields::unnamed()
+					.field(|f| f.ty::<u8>().docs(&["Raw capsule byte, encodes encrypted shares and nizk pok"])),
+			)
+	}
+}
 
 #[derive(Clone, PartialEq)]
 pub struct ACSSParams {
