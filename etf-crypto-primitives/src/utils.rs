@@ -4,13 +4,32 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_bls12_381::{Fr, G1Affine};
-
-// use alloc::vec::Vec;
-// #![cfg(not(feature = "std"))]
 use ark_std::vec::Vec;
+use paillier::{DecryptionKey, EncryptionKey, KeyGeneration, Keypair, Paillier};
+use serde::{Deserialize, Serialize};
 
-// #![cfg(feature = "std")]
-// use std::vec::Vec;
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KeypairWrapper {
+    pub ek: EncryptionKey,
+    pub dk: DecryptionKey,
+}
+
+/// create a new keypair for the paillier cryptosystem
+pub fn paillier_create_keypair() -> Result<Vec<u8>, bincode::Error> {
+    let bytes = bincode::serialize(&Paillier::keypair())?;
+    Ok(bytes)
+}
+
+/// create a new (ek, dk) from a keypair
+pub fn paillier_create_keys(keypair_bytes: Vec<u8>) -> Result<Vec<u8>, bincode::Error> {
+    let kp: Keypair = bincode::deserialize(&keypair_bytes)?;
+    let keys = kp.keys();
+    let output = bincode::serialize(&KeypairWrapper {
+        ek: keys.0,
+        dk: keys.1,
+    })?;
+    Ok(output)
+}
 
 /// sha256 hasher
 pub fn sha256(b: &[u8]) -> Vec<u8> {

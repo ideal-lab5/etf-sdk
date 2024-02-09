@@ -3,7 +3,7 @@ name = "etf-crypto-primitives"
 version = "0.2.3"
 edition = "2021"
 description = "cryptographic primitives for etf"
-license = "GPL-3.0-only"
+license = "Apache-2.0"
 repository = "https://github.com/ideal-lab5/etf-sdk"
 authors = ["Tony Riemer <driemworks@idealabs.network>"]
 rust-version = "1.63"
@@ -12,19 +12,19 @@ homepage = "https://idealabs.network"
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
-#[lib]
-#crate-type = ["lib"]
-#path = "src/lib.rs"
-
 [dependencies]
-# is it ok to use alloc here?
 serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"] }
+serde_cbor = "0.11"
+codec = { package = "parity-scale-codec", version = "3.6.1", default-features = false, features = ["derive", "max-encoded-len"] }
+scale-info = { version = "2.10.0", default-features = false, features = ["derive"] }
+# serde_json = {version = "1.0.108", default-features = false, features = ["alloc"] }
+bincode = "1.3"
 aes-gcm = { version = "0.10.2", default-features = false, features = ["alloc", "aes", "rand_core"] }
 array-bytes = "6.1.0"
 generic-array = "0.14.7"
+itertools = "0.12.0"
 sha2 = { version = "0.10.2", default-features = false }
 sha3 = { version = "0.10.0", default-features = false }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 # arkworks dependencies
 ark-std = { version = "0.4.0", default-features = false }
 ark-ff = { version = "0.4.0", default-features = false }
@@ -32,8 +32,15 @@ ark-poly = { version = "0.4.0", default-features = false }
 ark-ec = { version = "0.4.0", default-features = false }
 ark-serialize = { version = "0.4.0", default-features = false }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
-ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature"] }
+ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature", "encryption"] }
+rand_chacha = { version = "0.3.1", default-features = false }
+# curv-kzen = { version = "0.10", default-features = false }
+# paillier = { package = "kzen-paillier", version = "0.4.3", default-features = false }
+curv-kzen = { git = "https://github.com/ideal-lab5/curv.git", default-features = false}
+paillier = { package="kzen-paillier", git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
 
 [dev-dependencies]
 hex = "0.4.3"
-rand_chacha = { version = "0.3.1", default-features = false }
+
+[features]
+default = ["curv-kzen/num-bigint"]

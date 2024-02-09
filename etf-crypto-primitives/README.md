@@ -12,11 +12,11 @@ This repo has not been audited for security and should not yet be used in produc
 ## Build
 
 ``` rust
-cargo build
+cargo +nightly build
 ```
 
 ## Test
 
 ``` rust
-cargo test
+cargo +nightly test
 ```
