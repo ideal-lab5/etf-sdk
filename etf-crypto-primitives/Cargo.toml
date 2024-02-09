@@ -38,4 +38,4 @@ hex = "0.4.3"
 
 [features]
 # default = ["curv/num-bigint"]
-default = []
+default = ["curv/rust-gmp-kzen"]
