@@ -31,10 +31,11 @@ ark-crypto-primitives = { version = "0.4.0", default-features = false, features 
 rand_chacha = { version = "0.3.1", default-features = false }
 # paillier deps
 curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false }
-paillier = { package="kzen-paillier", git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
+paillier = { package="kzen-paillier", git = "https://github.com/ideal-lab5/rust-paillier"}
 
 [dev-dependencies]
 hex = "0.4.3"
 
 [features]
-default = ["curv/num-bigint"]
+# default = ["curv/num-bigint"]
+default = []
