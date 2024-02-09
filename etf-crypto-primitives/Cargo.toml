@@ -14,7 +14,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"] }
-bincode = {version = "1.3", default-features = false}
+bincode = { version = "1.3", default-features = false }
 aes-gcm = { version = "0.10.2", default-features = false, features = ["alloc", "aes", "rand_core"] }
 array-bytes = "6.1.0"
 generic-array = "0.14.7"
@@ -30,7 +30,7 @@ ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = fa
 ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature"] }
 rand_chacha = { version = "0.3.1", default-features = false }
 # paillier deps
-curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false }
+curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"] }
 paillier = { package="kzen-paillier", git = "https://github.com/ideal-lab5/rust-paillier", default-features = false}
 
 [dev-dependencies]
