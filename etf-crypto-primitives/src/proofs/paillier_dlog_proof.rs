@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#[cfg(feature = "paillier")]
 /*
  * Copyright 2024 by Ideal Labs, LLC
  *
@@ -18,9 +19,9 @@
 use curv::arithmetic::traits::*;
 use curv::BigInt;
 use serde::{Deserialize, Serialize};
-use paillier::EncryptWithChosenRandomness;
-use paillier::Paillier;
-use paillier::{EncryptionKey, Randomness, RawPlaintext};
+use kzen_paillier::EncryptWithChosenRandomness;
+use kzen_paillier::Paillier;
+use kzen_paillier::{EncryptionKey, Randomness, RawPlaintext};
 use sha2::{Digest, Sha256};
 
 use crate::alloc::string::ToString;
@@ -92,7 +93,7 @@ impl DLogProof {
         let mut p_bytes = Vec::new();
         p.serialize_compressed(&mut p_bytes).unwrap();
         // Y' = G^r s^N mod N^2 = enc(r;s)
-        let q = Paillier::encrypt_with_chosen_randomness(
+        let q = kzen_paillier::encrypt_with_chosen_randomness(
             &statement.ek,
             RawPlaintext::from(r.clone()),
             &Randomness(s.clone())
@@ -151,7 +152,7 @@ impl DLogProof {
             return Err(Error::InvalidCommitment)
         }
         // 3. CHECK t.1 = enc(r;s) == enc(z,w) Y^{-e} mod N^2
-        let ezw = Paillier::encrypt_with_chosen_randomness(
+        let ezw = kzen_paillier::encrypt_with_chosen_randomness(
             &statement.ek,
             RawPlaintext::from(self.z.clone()),
             &Randomness(self.w.clone()),
@@ -188,8 +189,8 @@ pub fn compute_digest<'a, I>(byte_slices: I) -> BigInt
 mod tests {
 
     use super::*;
-    use paillier::KeyGeneration;
-    use paillier::Paillier;
+    use kzen_paillier::KeyGeneration;
+    use kzen_paillier::Paillier;
 
     #[test]
     fn test_correct_dlog_proof() {
@@ -197,12 +198,12 @@ mod tests {
 
         // // should be safe primes (not sure if there is actual attack)
         // ((G, N), (p, q))
-        let (ek, dk) = Paillier::keypair().keys();
+        let (ek, dk) = kzen_paillier::keypair().keys();
         // x \in [0, G]
         let x = BigInt::sample_below(&ek.n);
         let u = BigInt::sample_below(&ek.n);
         // enc(x;u)
-        let ciphertext = Paillier::encrypt_with_chosen_randomness(
+        let ciphertext = kzen_paillier::encrypt_with_chosen_randomness(
             &ek, 
             RawPlaintext::from(x.clone()),
             &Randomness(u.clone()),

@@ -1,3 +1,4 @@
+#[cfg(feature = "paillier")]
 /*
  * Copyright 2024 by Ideal Labs, LLC
  *
@@ -17,9 +18,9 @@
 use curv::arithmetic::traits::*;
 use curv::BigInt;
 use serde::{Deserialize, Serialize};
-use paillier::EncryptWithChosenRandomness;
-use paillier::Paillier;
-use paillier::{EncryptionKey, Randomness, RawPlaintext};
+use kzen_paillier::EncryptWithChosenRandomness;
+use kzen_paillier::Paillier;
+use kzen_paillier::{EncryptionKey, Randomness, RawPlaintext};
 use sha2::{Digest, Sha256};
 
 use crate::alloc::string::ToString;
@@ -170,12 +171,12 @@ impl MultiDLogProof {
         let mut p_bytes = Vec::new();
         p.serialize_compressed(&mut p_bytes).unwrap();
         // Y' = G^r s^N mod N^2 = enc(r;s)
-        let q = Paillier::encrypt_with_chosen_randomness(
+        let q = kzen_paillier::encrypt_with_chosen_randomness(
             &ek,
             RawPlaintext::from(r.clone()),
             &Randomness(s.clone())
         ).0.into_owned();
-        let q_prime = Paillier::encrypt_with_chosen_randomness(
+        let q_prime = kzen_paillier::encrypt_with_chosen_randomness(
             &ek,
             RawPlaintext::from(r_prime.clone()),
             &Randomness(s_prime.clone())
@@ -287,7 +288,7 @@ fn check_ciphertext(
     ek: EncryptionKey,
 ) -> Result<(), Error> {
      // enc(z,w) Y^{-e} mod N^2
-     let ezw = Paillier::encrypt_with_chosen_randomness(
+     let ezw = kzen_paillier::encrypt_with_chosen_randomness(
         &ek,
         RawPlaintext::from(z.clone()),
         &Randomness(w.clone()),
@@ -323,8 +324,8 @@ pub fn compute_digest<'a, I>(byte_slices: I) -> BigInt
 mod tests {
 
     use super::*;
-    use paillier::KeyGeneration;
-    use paillier::Paillier;
+    use kzen_paillier::KeyGeneration;
+    use kzen_paillier::Paillier;
 
     use ark_ec::Group;
     use ark_ff::UniformRand;
@@ -336,20 +337,20 @@ mod tests {
 
         // // should be safe primes (not sure if there is actual attack)
         // ((G, N), (p, q))
-        let (ek, _dk) = Paillier::keypair().keys();
+        let (ek, _dk) = kzen_paillier::keypair().keys();
         // x \in [0, G]
         let x = BigInt::sample_below(&ek.n);
         let x_prime = BigInt::sample_below(&ek.n);
         let u = BigInt::sample_below(&ek.n);
         let u_prime = BigInt::sample_below(&ek.n);
         // enc(x;u)
-        let enc_xu = Paillier::encrypt_with_chosen_randomness(
+        let enc_xu = kzen_paillier::encrypt_with_chosen_randomness(
             &ek, 
             RawPlaintext::from(x.clone()),
             &Randomness(u.clone()),
         );
 
-        let enc_xu_prime = Paillier::encrypt_with_chosen_randomness(
+        let enc_xu_prime = kzen_paillier::encrypt_with_chosen_randomness(
             &ek, 
             RawPlaintext::from(x_prime.clone()),
             &Randomness(u_prime.clone()),

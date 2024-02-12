@@ -1,3 +1,4 @@
+#[cfg(feature = "paillier")]
 /*
  * Copyright 2024 by Ideal Labs, LLC
  *
@@ -31,7 +32,7 @@ use ark_std::{
 };
 // use scale_info::TypeInfo;
 use curv::arithmetic::traits::*;
-use paillier::{
+use kzen_paillier::{
     BigInt,
     Decrypt,
     DecryptionKey,

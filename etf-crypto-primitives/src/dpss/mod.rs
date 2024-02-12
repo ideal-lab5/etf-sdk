@@ -14,4 +14,5 @@
  * limitations under the License.
  */
  
+#[cfg(feature = "paillier")]
 pub mod acss;
