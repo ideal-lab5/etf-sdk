@@ -17,17 +17,17 @@ pub struct KeypairWrapper {
 
 #[cfg(feature = "paillier")]
 /// create a new keypair for the paillier cryptosystem
-pub fn paillier_create_keypair() -> Result<Vec<u8>, bincode::Error> {
-    let bytes = bincode::serialize(&Paillier::keypair())?;
+pub fn paillier_create_keypair() -> Result<Vec<u8>, serde_json::Error> {
+    let bytes = serde_json::to_vec(&Paillier::keypair())?;
     Ok(bytes)
 }
 
 #[cfg(feature = "paillier")]
 /// create a new (ek, dk) from a keypair
-pub fn paillier_create_keys(keypair_bytes: Vec<u8>) -> Result<Vec<u8>, bincode::Error> {
-    let kp: Keypair = bincode::deserialize(&keypair_bytes)?;
+pub fn paillier_create_keys(keypair_bytes: Vec<u8>) -> Result<Vec<u8>, serde_json::Error> {
+    let kp: Keypair = serde_json::from_slice(&keypair_bytes)?;
     let keys = kp.keys();
-    let output = bincode::serialize(&KeypairWrapper {
+    let output = serde_json::to_vec(&KeypairWrapper {
         ek: keys.0,
         dk: keys.1,
     })?;
