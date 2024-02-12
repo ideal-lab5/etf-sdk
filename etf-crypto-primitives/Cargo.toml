@@ -28,13 +28,13 @@ ark-ec = { version = "0.4.0", default-features = false }
 ark-serialize = { version = "0.4.0", default-features = false }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
 ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature"] }
-rand_chacha = { version = "0.3.1", default-features = false }
 # paillier deps
 curv = { package = "curv-kzen", optional = true, git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"] }
 kzen-paillier = { optional = true, git = "https://github.com/ideal-lab5/rust-paillier", default-features = false}
 
 [dev-dependencies]
 hex = "0.4.3"
+rand_chacha = "0.3.1"
 
 [features]
 default = []
