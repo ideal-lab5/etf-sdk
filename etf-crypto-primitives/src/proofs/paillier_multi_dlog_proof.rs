@@ -206,7 +206,7 @@ impl MultiDLogProof {
 /// Check that:
 ///     enc(z;w) * Y^{-e} mod N^2 === verification_ciphertext
 /// 
-/// in our case, the verification ciphertext looks like enc(r;s)
+/// in our case, the verification ciphertext can be represented by enc(r;s)
 ///
 fn check_ciphertext(
     e: &BigInt,
