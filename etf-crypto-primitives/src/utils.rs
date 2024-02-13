@@ -7,6 +7,7 @@ use ark_bls12_381::{Fr, G1Affine};
 use ark_std::vec::Vec;
 #[cfg(feature = "paillier")]
 use kzen_paillier::{DecryptionKey, EncryptionKey, KeyGeneration, Keypair, Paillier};
+use serde::{Serialize, Deserialize};
 
 #[cfg(feature = "paillier")]
 #[derive(Debug, Serialize, Deserialize)]

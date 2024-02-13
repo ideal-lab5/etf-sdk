@@ -93,7 +93,7 @@ impl DLogProof {
         let mut p_bytes = Vec::new();
         p.serialize_compressed(&mut p_bytes).unwrap();
         // Y' = G^r s^N mod N^2 = enc(r;s)
-        let q = kzen_paillier::encrypt_with_chosen_randomness(
+        let q = Paillier::encrypt_with_chosen_randomness(
             &statement.ek,
             RawPlaintext::from(r.clone()),
             &Randomness(s.clone())
@@ -152,7 +152,7 @@ impl DLogProof {
             return Err(Error::InvalidCommitment)
         }
         // 3. CHECK t.1 = enc(r;s) == enc(z,w) Y^{-e} mod N^2
-        let ezw = kzen_paillier::encrypt_with_chosen_randomness(
+        let ezw = Paillier::encrypt_with_chosen_randomness(
             &statement.ek,
             RawPlaintext::from(self.z.clone()),
             &Randomness(self.w.clone()),

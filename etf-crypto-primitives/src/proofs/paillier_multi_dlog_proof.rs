@@ -70,77 +70,6 @@ pub struct MultiDLogStatement {
     pub ek_n: BigInt,
 }
 
-
-// impl ark_std::ops::Deref for MultiDLogStatement {
-//     type Target = [u8];
-
-//     fn deref(&self) -> &[u8] {
-//         // Serialize each field and concatenate them into a single Vec<u8>
-//         let mut result = Vec::new();
-//         result.extend_from_slice(&self.g);
-//         result.extend_from_slice(&self.h);
-//         result.extend_from_slice(&self.ciphertext.to_string().as_bytes());
-//         result.extend_from_slice(&self.ciphertext_prime.to_string().as_bytes());
-//         result.extend_from_slice(&self.dlog);
-//         result.extend_from_slice(&self.ek_n.to_string().as_bytes());
-//         // &result.clone()[..]
-//         // &Vec::new()
-//         // let out = result.clone();
-//         // &out[..]
-//         self.g
-//     }
-// }
-
-// impl codec::WrapperTypeEncode for MultiDLogStatement {}
-
-// impl codec::MaxEncodedLen for MultiDLogStatement {
-//     fn max_encoded_len() -> usize {
-//         1
-//         // let g_len = <Vec<u8>>::max_encoded_len();
-//         // let h_len = <Vec<u8>>::max_encoded_len();
-//         // let bigint_len = BigInt::max_encoded_len();
-
-//         // // Assuming the encoding format uses length prefixes,
-//         // // add the length of each field plus the length of their length prefixes
-//         // g_len + h_len + bigint_len * 2 // For ciphertext and ek_n
-//         //     + 4 // Additional overhead for separators or length prefixes
-//     }
-// }
-
-// impl codec::Encode for MultiDLogProof {
-//     fn encode(&self) -> Vec<u8> {
-//         serde_cbor::to_vec(self).unwrap_or(Vec::new())
-//     }
-// }
-
-// impl codec::Decode for MultiDLogProof {
-//     fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
-//         // Convert input to byte slice
-//         let mut bytes = Vec::new();
-//         let _ = input.read(&mut bytes[..]).unwrap();
-//         let c: MultiDLogProof = serde_cbor::from_slice(&bytes)
-//             .map_err(|_| codec::Error::from("Invalid bytes"))?;
-//         Ok(c)
-//     }
-// }
-
-// impl codec::Encode for MultiDLogStatement {
-//     fn encode(&self) -> Vec<u8> {
-//         serde_cbor::to_vec(self).unwrap_or(Vec::new())
-//     }
-// }
-
-// impl codec::Decode for MultiDLogStatement {
-//     fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
-//         // Convert input to byte slice
-//         let mut bytes = Vec::new();
-//         let _ = input.read(&mut bytes[..]).unwrap();
-//         let c: MultiDLogStatement = serde_cbor::from_slice(&bytes)
-//             .map_err(|_| codec::Error::from("Invalid bytes"))?;
-//         Ok(c)
-//     }
-// }
-
 impl MultiDLogProof {
 
     pub fn prove(
@@ -171,12 +100,12 @@ impl MultiDLogProof {
         let mut p_bytes = Vec::new();
         p.serialize_compressed(&mut p_bytes).unwrap();
         // Y' = G^r s^N mod N^2 = enc(r;s)
-        let q = kzen_paillier::encrypt_with_chosen_randomness(
+        let q = Paillier::encrypt_with_chosen_randomness(
             &ek,
             RawPlaintext::from(r.clone()),
             &Randomness(s.clone())
         ).0.into_owned();
-        let q_prime = kzen_paillier::encrypt_with_chosen_randomness(
+        let q_prime = Paillier::encrypt_with_chosen_randomness(
             &ek,
             RawPlaintext::from(r_prime.clone()),
             &Randomness(s_prime.clone())
@@ -288,7 +217,7 @@ fn check_ciphertext(
     ek: EncryptionKey,
 ) -> Result<(), Error> {
      // enc(z,w) Y^{-e} mod N^2
-     let ezw = kzen_paillier::encrypt_with_chosen_randomness(
+     let ezw = Paillier::encrypt_with_chosen_randomness(
         &ek,
         RawPlaintext::from(z.clone()),
         &Randomness(w.clone()),
