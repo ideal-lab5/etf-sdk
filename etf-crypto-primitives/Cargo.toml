@@ -50,6 +50,5 @@ std = [
     "ark-crypto-primitives/std",
     "serde_json/std",
     "serde_cbor/std",
-    "curv/rust-gmp-kzen"
 ]
 paillier = ["curv/num-bigint", "curv", "kzen-paillier"]
