@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#[cfg(feature = "paillier")]
+
 /*
  * Copyright 2024 by Ideal Labs, LLC
  *
@@ -186,7 +186,7 @@ pub fn compute_digest<'a, I>(byte_slices: I) -> BigInt
 }
 
 #[cfg(test)]
-#[cfg(feature = "paillier")]
+
 mod tests {
 
     use super::*;

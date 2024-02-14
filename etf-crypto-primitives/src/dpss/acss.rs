@@ -1,4 +1,4 @@
-#[cfg(feature = "paillier")]
+
 /*
  * Copyright 2024 by Ideal Labs, LLC
  *
@@ -302,7 +302,7 @@ pub fn generate_shares_checked<R: Rng + Sized>(
 }
 
 #[cfg(test)]
-#[cfg(feature = "paillier")]
+
 pub mod tests {
 
     use super::*;
