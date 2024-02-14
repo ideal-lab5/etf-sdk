@@ -108,3 +108,14 @@ mod test {
         assert_eq!(actual, expected);
     }
 }
+
+// cargo test --features paillier
+#[cfg(test)]
+#[cfg(feature = "paillier")]
+mod pailler_test {
+    #[test]
+    fn paillier_can_create_and_inspect_keys() {
+        let kp = crate::utils::paillier_create_keypair().unwrap();
+        let ek = crate::utils::paillier_create_keys(kp).ok();
+    }
+}

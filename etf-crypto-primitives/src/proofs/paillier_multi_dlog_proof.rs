@@ -250,6 +250,7 @@ pub fn compute_digest<'a, I>(byte_slices: I) -> BigInt
 }
 
 #[cfg(test)]
+#[cfg(feature = "paillier")]
 mod tests {
 
     use super::*;
@@ -266,20 +267,20 @@ mod tests {
 
         // // should be safe primes (not sure if there is actual attack)
         // ((G, N), (p, q))
-        let (ek, _dk) = kzen_paillier::keypair().keys();
+        let (ek, _dk) = Paillier::keypair().keys();
         // x \in [0, G]
         let x = BigInt::sample_below(&ek.n);
         let x_prime = BigInt::sample_below(&ek.n);
         let u = BigInt::sample_below(&ek.n);
         let u_prime = BigInt::sample_below(&ek.n);
         // enc(x;u)
-        let enc_xu = kzen_paillier::encrypt_with_chosen_randomness(
+        let enc_xu = Paillier::encrypt_with_chosen_randomness(
             &ek, 
             RawPlaintext::from(x.clone()),
             &Randomness(u.clone()),
         );
 
-        let enc_xu_prime = kzen_paillier::encrypt_with_chosen_randomness(
+        let enc_xu_prime = Paillier::encrypt_with_chosen_randomness(
             &ek, 
             RawPlaintext::from(x_prime.clone()),
             &Randomness(u_prime.clone()),

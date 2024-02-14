@@ -302,6 +302,7 @@ pub fn generate_shares_checked<R: Rng + Sized>(
 }
 
 #[cfg(test)]
+#[cfg(feature = "paillier")]
 pub mod tests {
 
     use super::*;
@@ -309,7 +310,7 @@ pub mod tests {
     use ark_ec::Group;
     use ark_std::test_rng;
 
-    use paillier::{BigInt, KeyGeneration, EncryptionKey};
+    use kzen_paillier::{BigInt, KeyGeneration, EncryptionKey};
     use ark_poly::{
         polynomial::univariate::DensePolynomial,
         DenseUVPolynomial, Polynomial,
