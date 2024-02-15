@@ -29,7 +29,7 @@ ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = fa
 # paillier deps
 serde_json = { version = "1.0.108", default-features = false, features = ["alloc"] }
 serde_cbor = {version = "0.11.2", default-features = false}
-curv = { version = "0.11.0", package = "curv-kzen", git = "https://github.com/ideal-lab5/curv" }
+curv = { version = "0.11.0", package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"]}
 kzen-paillier = { version = "0.4.4", git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
 
 [dev-dependencies]
@@ -49,6 +49,6 @@ std = [
     "ark-bls12-381/std",
     "serde_json/std",
     "serde_cbor/std",
-    # "curv/std",
-    # "kzen-paillier/std",
+    "curv/std",
+    "kzen-paillier/std",
 ]
