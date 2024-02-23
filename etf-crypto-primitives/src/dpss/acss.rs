@@ -32,8 +32,8 @@ use ark_std::{
 };
 // use scale_info::TypeInfo;
 use curv::arithmetic::traits::*;
+use curv::BigInt;
 use kzen_paillier::{
-    BigInt,
     Decrypt,
     DecryptionKey,
     EncryptionKey, 

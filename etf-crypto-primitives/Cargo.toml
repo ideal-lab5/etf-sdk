@@ -28,9 +28,9 @@ ark-serialize = { version = "0.4.0", default-features = false }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
 # paillier deps
 serde_json = { version = "1.0.108", default-features = false, features = ["alloc"] }
-serde_cbor = {version = "0.11.2", default-features = false}
-curv = { version = "0.11.0", package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"]}
-kzen-paillier = { version = "0.4.4", git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
+serde_cbor = {version = "0.11.2", default-features = false }
+kzen-paillier = { git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
+curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"]}
 
 [dev-dependencies]
 hex = "0.4.3"
