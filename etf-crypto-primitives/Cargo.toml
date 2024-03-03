@@ -1,9 +1,9 @@
 [package]
 name = "etf-crypto-primitives"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 description = "cryptographic primitives for etf"
-license = "GPL-3.0-only"
+license = "Apache-2.0"
 repository = "https://github.com/ideal-lab5/etf-sdk"
 authors = ["Tony Riemer <driemworks@idealabs.network>"]
 rust-version = "1.63"
@@ -12,19 +12,13 @@ homepage = "https://idealabs.network"
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
-#[lib]
-#crate-type = ["lib"]
-#path = "src/lib.rs"
-
 [dependencies]
-# is it ok to use alloc here?
 serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"] }
 aes-gcm = { version = "0.10.2", default-features = false, features = ["alloc", "aes", "rand_core"] }
 array-bytes = "6.1.0"
 generic-array = "0.14.7"
 sha2 = { version = "0.10.2", default-features = false }
 sha3 = { version = "0.10.0", default-features = false }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 # arkworks dependencies
 ark-std = { version = "0.4.0", default-features = false }
 ark-ff = { version = "0.4.0", default-features = false }
@@ -32,8 +26,29 @@ ark-poly = { version = "0.4.0", default-features = false }
 ark-ec = { version = "0.4.0", default-features = false }
 ark-serialize = { version = "0.4.0", default-features = false }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
-ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["signature"] }
+# paillier deps
+serde_json = { version = "1.0.108", default-features = false, features = ["alloc"] }
+serde_cbor = {version = "0.11.2", default-features = false }
+kzen-paillier = { git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
+curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"]}
 
 [dev-dependencies]
 hex = "0.4.3"
-rand_chacha = { version = "0.3.1", default-features = false }
+rand_chacha = "0.3.1"
+
+[features]
+default = ["std"]
+std = [
+    "sha2/std",
+    "sha3/std",
+    "ark-std/std",
+    "ark-ff/std",
+    "ark-poly/std",
+    "ark-ec/std",
+    "ark-serialize/std",
+    "ark-bls12-381/std",
+    "serde_json/std",
+    "serde_cbor/std",
+    "curv/std",
+    "kzen-paillier/std",
+]

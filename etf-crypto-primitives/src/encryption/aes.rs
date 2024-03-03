@@ -77,15 +77,18 @@ pub fn decrypt(
     Ok(plaintext)
 }
 
+/// TODO: move to common file
+/// TODO: refactor/rename
 /// Generate a random polynomial f and return evalulations (f(0), (1, f(1), ..., n, f(n)))
 /// f(0) is the 'secret' and the shares can be used to recover the secret with `let s = interpolate(shares);`
 ///
 /// * `n`: The number of shares to generate
-/// * `t`: The degree of the polynomial
+/// * `t`: The degree of the polynomial (i.e. the threhsold)
 /// * `rng`: A random number generator
 ///
 pub fn generate_secrets<R: Rng + Sized>(
-    n: u8, t: u8, mut rng: R) -> (Fr, Vec<(Fr, Fr)>) {
+    n: u8, t: u8, mut rng: R
+) -> (Fr, Vec<(Fr, Fr)>) {
     
     if n == 1 {
         let r = Fr::rand(&mut rng);
@@ -102,31 +105,64 @@ pub fn generate_secrets<R: Rng + Sized>(
     (msk, evals)
 }
 
+// pub fn generate_shares_checked<R: Rng + Sized>(
+//     s: Fr, n: u8, t: u8, mut rng: R
+// ) -> Vec<(Fr, Fr)> {
+    
+//     if n == 1 {
+//         let r = Fr::rand(&mut rng);
+//         return vec![(Fr::zero(), r)];
+//     }
+
+//     let mut coeffs: Vec<Fr> = (0..t+1).map(|i| Fr::rand(&mut rng)).collect();
+//     coeffs[0] = s.clone();
+
+//     let f = DensePolynomial::<Fr>::from_coefficients_vec(coeffs);
+//     let msk = f.evaluate(&Fr::zero());
+//     let evals: Vec<(Fr, Fr)> = (1..n+1)
+//         .map(|i| {
+//             let e = Fr::from(i);
+//             (e, f.evaluate(&e))
+//         }).collect();
+//     evals
+// }
+
+/// TODO: move this to a common place
 /// interpolate a polynomial from the input and evaluate it at 0
+/// P(X) = sum_{i = 0} ^n y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj))
 ///
 /// * `evalulation`: a vec of (x, f(x)) pairs
 ///
-pub fn interpolate(evaluations: Vec<(Fr, Fr)>) -> Fr {
-    let n = evaluations.len();
+pub fn interpolate(points: Vec<(Fr, Fr)>) -> Fr {
+    let n = points.len();
 
     // Calculate the Lagrange basis polynomials evaluated at 0
     let mut lagrange_at_zero: Vec<Fr> = Vec::with_capacity(n);
     for i in 0..n {
+
+        // build \prod_{j=0}^n [j != i] (x-xj/xi - xj)
         let mut basis_value = Fr::one();
         for j in 0..n {
-            if i != j {
-                let denominator = evaluations[i].0 - evaluations[j].0;
-                // todo: handle unwrap?
-                basis_value *= denominator.inverse().unwrap() * evaluations[j].0;
+            if j != i {
+                let denominator = points[i].0 - points[j].0;
+                // Check if the denominator is zero before taking the inverse
+                if denominator.is_zero() {
+                    // Handle the case when the denominator is zero (or very close to zero)
+                    return Fr::zero();
+                }
+                let numerator = Fr::zero() - points[j].0;
+                // Use the precomputed inverse
+                basis_value *= numerator * denominator.inverse().unwrap();
             }
         }
         lagrange_at_zero.push(basis_value);
     }
 
     // Interpolate the value at 0
+    // compute  sum_{i = 0} ^n (y_i * sum... )
     let mut interpolated_value = Fr::zero();
     for i in 0..n {
-        interpolated_value += evaluations[i].1 * lagrange_at_zero[i];
+        interpolated_value += points[i].1 * lagrange_at_zero[i];
     }
 
     interpolated_value
@@ -203,8 +239,8 @@ mod test {
 
     #[test]
     fn secrets_interpolation() {
-        let n = 5; // Number of participants
-        let t = 3; // Threshold
+        let n = 10; // Number of participants
+        let t = 7; // Threshold
         let rng = ChaCha20Rng::from_seed([4;32]);
         let (msk, shares) = generate_secrets(n, t, rng);
         // Perform Lagrange interpolation
