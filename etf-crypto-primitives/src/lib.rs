@@ -1,5 +1,5 @@
-//#![cfg_attr(not(feature = "std"), no_std)]
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
+// #![no_std]
 
 #![warn(
     unused,
@@ -20,6 +20,16 @@ pub mod ibe;
 pub mod proofs;
 pub mod client;
 pub mod dpss;
+pub mod types;
 
 // #[cfg(test)]
 pub mod testing;
+
+#[cfg(feature = "std")]
+pub use kzen_paillier::EncryptionKey as PaillierEncryptionKey;
+#[cfg(feature = "std")]
+pub use kzen_paillier::DecryptionKey as PaillierDecryptionKey;
+#[cfg(feature = "std")]
+pub use kzen_paillier::MinimalDecryptionKey as MinimalDecryptionKey;
+#[cfg(feature = "std")]
+pub use kzen_paillier::BigInt as BigInt;

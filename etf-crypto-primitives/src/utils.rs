@@ -5,25 +5,25 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_bls12_381::{Fr, G1Affine};
 use ark_std::vec::Vec;
-
+#[cfg(feature = "std")]
 use kzen_paillier::{DecryptionKey, EncryptionKey, KeyGeneration, Keypair, Paillier};
 use serde::{Serialize, Deserialize};
 
-
+#[cfg(feature = "std")]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KeypairWrapper {
     pub ek: EncryptionKey,
     pub dk: DecryptionKey,
 }
 
-
+#[cfg(feature = "std")]
 /// create a new keypair for the paillier cryptosystem
 pub fn paillier_create_keypair() -> Result<Vec<u8>, serde_json::Error> {
     let bytes = serde_json::to_vec(&Paillier::keypair())?;
     Ok(bytes)
 }
 
-
+#[cfg(feature = "std")]
 /// create a new (ek, dk) from a keypair
 pub fn paillier_create_keys(keypair_bytes: Vec<u8>) -> Result<Vec<u8>, serde_json::Error> {
     let kp: Keypair = serde_json::from_slice(&keypair_bytes)?;

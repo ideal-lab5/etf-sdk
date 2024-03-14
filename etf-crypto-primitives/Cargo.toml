@@ -13,6 +13,8 @@ homepage = "https://idealabs.network"
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
+codec = { package = "parity-scale-codec", version = "3.2.2", default-features = false, features = ["derive", "max-encoded-len"] }
+scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
 serde = { version = "1.0.160", default-features = false, features = ["derive", "alloc"] }
 aes-gcm = { version = "0.10.2", default-features = false, features = ["alloc", "aes", "rand_core"] }
 array-bytes = "6.1.0"
@@ -29,16 +31,24 @@ ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = fa
 # paillier deps
 serde_json = { version = "1.0.108", default-features = false, features = ["alloc"] }
 serde_cbor = {version = "0.11.2", default-features = false }
-kzen-paillier = { git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
-curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"]}
+chacha20poly1305 = { version = "0.10.1", default-features = false}
+ring = "0.17.8"
+rand_chacha = "0.3.1"
+# kzen-paillier = { git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
+# curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"]}
+kzen-paillier = { path = "../../rust-paillier", optional = true}
+# not exactly no-std compatible...
+curv = { package = "curv-kzen", path = "../../curv", optional = true, features = ["num-bigint"]}
 
 [dev-dependencies]
 hex = "0.4.3"
-rand_chacha = "0.3.1"
+ark-ed-on-bls12-381 = { version = "^0.4.0", default-features = false, features = [ "r1cs" ] }
 
 [features]
 default = ["std"]
 std = [
+    "codec/std",
+    "scale-info/std",
     "sha2/std",
     "sha3/std",
     "ark-std/std",
@@ -49,6 +59,8 @@ std = [
     "ark-bls12-381/std",
     "serde_json/std",
     "serde_cbor/std",
-    "curv/std",
-    "kzen-paillier/std",
+    "chacha20poly1305/std",
+    "curv",
+    "kzen-paillier",
+    "curv/num-bigint",
 ]

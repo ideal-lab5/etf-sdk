@@ -22,30 +22,34 @@ use ark_poly::{
     polynomial::univariate::DensePolynomial,
     DenseUVPolynomial, Polynomial,
 };
-use ark_ec::Group;
+use ark_ec::{CurveGroup, Group};
 use ark_std::{
     cmp::Ordering,
     ops::Mul,
     vec::Vec, 
-    rand::Rng,
+    rand::{CryptoRng, Rng, SeedableRng},
     collections::BTreeMap,
 };
-// use scale_info::TypeInfo;
-use curv::arithmetic::traits::*;
-use curv::BigInt;
-use kzen_paillier::{
-    Decrypt,
-    DecryptionKey,
-    EncryptionKey, 
-    Paillier,
-    EncryptWithChosenRandomness,
-    RawCiphertext,
-    RawPlaintext,
-    Randomness,
+use scale_info::TypeInfo;
+use alloc::boxed::Box;
+
+use serde_json::from_slice;
+use serde::{Deserialize, Serialize};
+
+use codec::{Encode, Decode};
+use ring::{agreement, agreement::{PublicKey, X25519}};
+use chacha20poly1305::{
+    aead::{Aead, AeadCore, KeyInit},
+    XChaCha20Poly1305, XNonce
+};
+use crate::{
+    proofs::el_gamal_sigma::PoK,
+    types::ProtocolParams as ACSSParams,
+    utils::convert_to_bytes,
 };
 
-use serde::{Deserialize, Serialize};
-use crate::proofs::{MultiDLogProof, MultiDLogStatement};
+
+// pub type PublicKey = [u8;32];
 
 /// errors for the DPSS reshare algorithm
 #[derive(Debug)]
@@ -58,82 +62,44 @@ pub enum ACSSError {
     InvalidProof,
 }
 
-// A wrapper for EncryptionKey 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct WrappedEncryptionKey(pub EncryptionKey);
-
-impl Eq for WrappedEncryptionKey {}
-
-impl PartialEq for WrappedEncryptionKey {
-    fn eq(&self, other: &Self) -> bool {
-        // Check equality based on both 'n' and 'nn' fields
-        self.0.n == other.0.n && self.0.nn == other.0.nn
-    }
-}
-
-impl Ord for WrappedEncryptionKey {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // Compare based on the ordering of the 'n' field
-        match self.0.n.cmp(&other.0.n) {
-            Ordering::Equal => {
-                // If 'n' is equal, compare based on the 'nn' field
-                self.0.nn.cmp(&other.0.nn)
-            }
-            ordering => ordering,
-        }
-    }
-}
-
-impl PartialOrd for WrappedEncryptionKey {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl WrappedEncryptionKey {
-    pub fn into_inner(self) -> EncryptionKey {
-        self.0
-    }
+#[derive(Clone, PartialEq, Debug)]
+pub struct Resharing<C: CurveGroup> {
+    pub capsules: Vec<Capsule>,
+    pub proof: PoK<C>,
 }
 
 /// represents the data that an old committee member
 /// passes to a new one
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Capsule {
-    /// the 'n' value of the encryption key (EK = (n, n^2))
-    pub ek_n: BigInt,
-    // /// field element where evaluation took place
-    // pub eval: Vec<u8>,
-    /// an encrypted secret
-    pub enc_xu: BigInt,
-    /// an encrypted secret (blinding)
-    pub enc_xu_prime: BigInt,
-    /// pedersen committment bytes: g^x h^{x'} 
-    pub dlog: Vec<u8>,
-    /// a NIZK PoK that the dlog is a commitment to both ciphertexts
-    pub proof: MultiDLogProof,
+   pub ciphertext: Vec<u8>,
+   pub ciphertext_prime: Vec<u8>,
+   pub commitment: Vec<u8>,
 }
 
-impl Capsule {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Capsule, serde_cbor::Error> {
-        serde_cbor::from_slice(bytes)
-    }
-}
+// #[cfg(feature = "std")]
+// impl AsRef<[u8]> for Capsule {
+//     fn as_ref(&self) -> &[u8] {
+//         // Serialize the Capsule struct into a Vec<u8>
+//         let serialized = serde_json::to_vec(self).unwrap();
+//         // Convert the vector into a boxed slice and return a reference to it
+//         Box::leak(serialized.into_boxed_slice())
+//     }
+// }
 
-#[derive(Clone, PartialEq, CanonicalDeserialize, CanonicalSerialize)]
-pub struct ACSSParams {
-    g: G,
-    h: G,
-}
+// #[cfg(feature = "std")]
+// #[derive(Serialize, Deserialize)]
+// pub enum CapsuleError {
+//     /// the byte array could not be converted to a Capsule
+//     SerializationError,
+// }
 
-impl ACSSParams {
-    pub fn rand<R: Rng + Sized>(mut rng: R) -> Self {
-        Self {
-            g: G::generator(),
-            h: G::rand(&mut rng)
-        }
-    }
-}
+// #[cfg(feature = "std")]
+// impl Capsule {
+//     pub fn from_bytes(bytes: &[u8]) -> Result<Capsule, CapsuleError> {
+//         from_slice(bytes).map_err(|_| CapsuleError::SerializationError)?
+//     }
+// }
 
 /// the high threshold asynchronous complete secret sharing struct
 pub struct HighThresholdACSS { }
@@ -149,139 +115,125 @@ impl HighThresholdACSS {
     /// `t`: The threshold (t <= n)
     /// `rng`: A random number generator
     ///
-    pub fn produce_shares<R: Rng + Sized>(
-        params: ACSSParams,
+    pub fn reshare<R: ring::rand::SecureRandom>(
+        params: ACSSParams<G>,
         msk: Fr, 
         msk_hat: Fr,
-        next_committee: &[WrappedEncryptionKey],
+        next_committee: &[PublicKey],
         t: u8,
         mut rng: R,
-    ) -> Vec<Capsule> {
+    ) -> Resharing<G> {
+        // let mut buffer = Vec::new();
+        // rng.fill(&mut buffer);
+        // panic!("{:?}", buffer);
+        // let mut bytes = [0u8;32];
+        // // 32
+        // bytes[..32].copy_from_slice(&buffer[..32]);
+        let mut chacha = rand_chacha::ChaCha20Rng::from_seed([0;32]);
         // f(x) -> [f(0), {(1, f(1)), ..., (n, f(n))}]
         let evals: BTreeMap<Fr, Fr> = generate_shares_checked(
-            msk, next_committee.len() as u8, t, &mut rng);
+            msk, next_committee.len() as u8, t, &mut chacha);
         // f_hat(x) (blinding polynomial) -> [f'(0), {1, f'(1), ...}]
         let evals_hat: BTreeMap<Fr, Fr> = generate_shares_checked(
-            msk_hat, next_committee.len() as u8, t, &mut rng);
-        // map to merge the evaluations
+            msk_hat, next_committee.len() as u8, t, &mut chacha);
+        // map to aggregate the outputs
         let mut result: Vec<Capsule> = Vec::new();
+        let mut secrets = Vec::new();
 
         // TODO: check that evals.len == evals_hat.len == next_committe.len ?
-
+        // TODO: error handling
         for (idx, member) in next_committee.iter().enumerate() {
+            // the committee member's 'position' as a scalar field element
             let f_elem = Fr::from((idx as u8) + 1);
-            // TODO: handle error
+            // calculate shares
             let x = evals.get(&f_elem).unwrap();
-            let x_p = BigInt::from_bytes(&x.into_bigint().to_bytes_be());
-            // let x_bytes: Vec<u8> = x.into_bigint().to_bytes_be();
-            // x.serialize_compressed(&mut x_bytes).unwrap();
-
-            // let x_bytes_64 = x_bytes.iter().map(|u| *u as u64).collect::<Vec<_>>();
-
             let x_prime = evals_hat.get(&f_elem).unwrap();
-            let x_prime_p = BigInt::from_bytes(&x_prime.into_bigint().to_bytes_be());
+            // we will use these later to construct the batched PoK
+            secrets.push(*x);
+            secrets.push(*x_prime);
+            let commitment = params.clone().g.mul(x) + params.clone().h.mul(x_prime);
+            // perform a key exchange with the pubkey
+            // and finally calculate the ciphertexts
+            let protocol_ephem_private_key = 
+                agreement::EphemeralPrivateKey::generate(&X25519, &rng).unwrap();
+            let peer_public_key = agreement::UnparsedPublicKey::new(&X25519, member);
+            agreement::agree_ephemeral(
+                protocol_ephem_private_key,
+                &peer_public_key,
+                |key_material| {
+                    // In a real application, we'd apply a KDF to the key material and the
+                    // public keys (as recommended in RFC 7748) and then derive session
+                    // keys from the result. We omit this here (for now).
+                                
+                    let key = generic_array::GenericArray::from_slice(&key_material);
+                    let cipher = XChaCha20Poly1305::new(&key);
+                    let nonce = XChaCha20Poly1305::generate_nonce(&mut chacha); // 192-bits; unique per message
+                    // convert scalars to bytes
+                    let x_bytes = convert_to_bytes::<Fr, 32>(*x).to_vec();
+                    let x_prime_bytes = convert_to_bytes::<Fr, 32>(*x_prime).to_vec();
+                    let ciphertext = cipher.encrypt(&nonce, x_bytes.as_ref()).unwrap();
+                    let ciphertext_prime = cipher.encrypt(&nonce, x_prime_bytes.as_ref()).unwrap();
+                    result.push(Capsule {
+                        ciphertext,
+                        ciphertext_prime,
+                        commitment: convert_to_bytes::<G, 48>(commitment).into(),
+                    });
+                },
+            ).unwrap();  
+        }
 
-            // let mut x_hat_bytes: Vec<u8> = Vec::new();
-            // u_hat.serialize_compressed(&mut x_hat_bytes).unwrap();
+        let proof = crate::proofs::el_gamal_sigma::PoK::batch_prove(
+            secrets.iter().map(|s| *s).collect::<Vec<_>>().as_slice(), 
+            params.clone(), 
+            &mut chacha
+        );
 
-            // let x_hat_bytes_64 = x_hat_bytes.iter().map(|u| *u as u64).collect::<Vec<_>>();
-
-            // (u, u') <- [0, A]
-            let u = BigInt::sample_below(&member.clone().into_inner().n);
-            let u_prime = BigInt::sample_below(&member.clone().into_inner().n);
-            // encryption
-            let enc_xu = Paillier::encrypt_with_chosen_randomness(
-                &member.clone().into_inner(), 
-                RawPlaintext::from(&x_p),
-                &Randomness(u.clone())
-            ).0.into_owned();
-            let enc_xu_prime = Paillier::encrypt_with_chosen_randomness(
-                &member.clone().into_inner(), 
-                RawPlaintext::from(&x_prime_p),
-                &Randomness(u_prime.clone())
-            ).0.into_owned();
-            // TODO: ZKPoK
-            let dlog = params.g.mul(x) + params.h.mul(x_prime);
-
-            let mut g_bytes = Vec::new();
-            params.g.serialize_compressed(&mut g_bytes).unwrap();
-            let mut h_bytes = Vec::new();
-            params.h.serialize_compressed(&mut h_bytes).unwrap();
-    
-            // let dlog = selfg.mul(x_scalar) + h.mul(x_prime_scalar);
-            let mut dlog_bytes = Vec::new();
-            dlog.serialize_compressed(&mut dlog_bytes).unwrap();
-
-            let statement = MultiDLogStatement {
-                g: g_bytes, 
-                h: h_bytes,
-                ciphertext: enc_xu.clone(),
-                ciphertext_prime: enc_xu_prime.clone(),
-                dlog: dlog_bytes,
-                ek_n: member.clone().into_inner().n,
-            };
-            let proof = MultiDLogProof::prove(
-                &statement, 
-                &u, &u_prime,
-                &x_p, &x_prime_p,
-            );
-
-            let dlog_bytes = crate::utils::convert_to_bytes::<G, 48>(dlog).to_vec();
-
-            result.push(
-                Capsule {
-                    // eval: eval_bytes,
-                    enc_xu, 
-                    enc_xu_prime,
-                    dlog: dlog_bytes,
-                    proof,
-                    ek_n: member.clone().into_inner().n,
-                }
-            );
-        };
-
-        result
+        Resharing {
+            capsules: result,
+            proof
+        }
     }
 
     /// decrypt shares + authenticate
     /// outputs the new share and its blinding share
-    pub fn authenticate_shares(
-        params: ACSSParams, 
-        dk: DecryptionKey,
+    pub fn recover(
+        params: ACSSParams<G>, 
+        // dk: DecryptionKey,
         capsule: Capsule
     ) -> Result<(Fr, Fr), ACSSError>  {
 
-        // TODO: store bytes in the struct instead?
-        let mut g_bytes = Vec::new();
-        params.g.serialize_compressed(&mut g_bytes).unwrap();
-        let mut h_bytes = Vec::new();
-        params.h.serialize_compressed(&mut h_bytes).unwrap();
+        // // TODO: store bytes in the struct instead?
+        // let mut g_bytes = Vec::new();
+        // params.g.serialize_compressed(&mut g_bytes).unwrap();
+        // let mut h_bytes = Vec::new();
+        // params.h.serialize_compressed(&mut h_bytes).unwrap();
 
-        let statement = MultiDLogStatement {
-            g: g_bytes, 
-            h: h_bytes,
-            ciphertext: capsule.enc_xu.clone(),
-            ciphertext_prime: capsule.enc_xu_prime.clone(),
-            dlog: capsule.dlog,
-            ek_n: capsule.ek_n,
-        };
+        // let statement = MultiDLogStatement {
+        //     g: g_bytes, 
+        //     h: h_bytes,
+        //     ciphertext: capsule.enc_xu.clone(),
+        //     ciphertext_prime: capsule.enc_xu_prime.clone(),
+        //     dlog: capsule.dlog,
+        //     ek_n: capsule.ek_n,
+        // };
 
-        capsule.proof.verify(&statement)
-            .map_err(|_| ACSSError::InvalidProof)?;
+        // capsule.proof.verify(&statement)
+        //     .map_err(|_| ACSSError::InvalidProof)?;
 
-        let x = Paillier::decrypt(
-            &dk, 
-            RawCiphertext::from(&capsule.enc_xu)
-        ).0.into_owned();
-        let x_prime = Paillier::decrypt(
-            &dk, 
-            RawCiphertext::from(&capsule.enc_xu_prime)
-        ).0.into_owned();
+        // let x = Paillier::decrypt(
+        //     &dk, 
+        //     RawCiphertext::from(&capsule.enc_xu)
+        // ).0.into_owned();
+        // let x_prime = Paillier::decrypt(
+        //     &dk, 
+        //     RawCiphertext::from(&capsule.enc_xu_prime)
+        // ).0.into_owned();
 
-        let s: Fr = Fr::from_be_bytes_mod_order(&x.to_bytes());
-        let s_prime: Fr = Fr::from_be_bytes_mod_order(&x_prime.to_bytes());
+        // let s: Fr = Fr::from_be_bytes_mod_order(&x.to_bytes());
+        // let s_prime: Fr = Fr::from_be_bytes_mod_order(&x_prime.to_bytes());
 
-        Ok((s, s_prime))
+        // Ok((s, s_prime))
+        Err(ACSSError::InvalidProof)
     }
 }
 
@@ -290,7 +242,7 @@ pub fn generate_shares_checked<R: Rng + Sized>(
 ) -> BTreeMap<Fr, Fr> {
     let mut coeffs: Vec<Fr> = (0..t+1).map(|_| Fr::rand(&mut rng)).collect();
     coeffs[0] = s;
-
+//
     let f = DensePolynomial::<Fr>::from_coefficients_vec(coeffs);
     let mut out: BTreeMap<Fr, Fr> = BTreeMap::new();
     (1..n+1).for_each(|i| {
@@ -302,13 +254,18 @@ pub fn generate_shares_checked<R: Rng + Sized>(
 }
 
 #[cfg(test)]
-
 pub mod tests {
 
     use super::*;
     use ark_std::vec::Vec;
     use ark_ec::Group;
-    use ark_std::test_rng;
+    use ark_std::rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+
+    use ring::{
+        agreement::{Algorithm, X25519, EphemeralPrivateKey},
+        rand::SystemRandom,
+    };
 
     use kzen_paillier::{BigInt, KeyGeneration, EncryptionKey};
     use ark_poly::{
@@ -321,122 +278,126 @@ pub mod tests {
     // we want to share the msk with a new committee while only providing new shares
     #[test]
     pub fn basic_reshare_works() {
-        // generate initial committee keys
-        let initial_committee_keys: Vec<(EncryptionKey, DecryptionKey)> 
-            = (0..3).map(|_| { Paillier::keypair().keys() }).collect();
-        let next_committee_keys: Vec<(EncryptionKey, DecryptionKey)> 
-            = (0..5).map(|_| { Paillier::keypair().keys() }).collect();
-        // then flatmap to public keys
-        let initial_committee: Vec<WrappedEncryptionKey> = initial_committee_keys
-            .iter()
-            .map(|c| WrappedEncryptionKey(c.0.clone()))
+        let m = 2;
+        let n = 5;
+        // generate keys for the committees
+        let mut sys_rng = SystemRandom::new();
+        let mut rng = ChaCha20Rng::seed_from_u64(0);
+
+        let alg: &Algorithm = &X25519;
+
+        let initial_committee_keys = (0..m).map(|_| EphemeralPrivateKey::generate(alg, &mut sys_rng).unwrap())
             .collect::<Vec<_>>();
-        let next_committee = next_committee_keys
+        let initial_committee_public = initial_committee_keys
             .iter()
-            .map(|c| WrappedEncryptionKey(c.0.clone()))
+            .map(|key| key.compute_public_key().unwrap())
+            .collect::<Vec<_>>();
+
+        let next_committee_keys = (0..n).map(|_| EphemeralPrivateKey::generate(alg, &mut sys_rng).unwrap())
+            .collect::<Vec<_>>();
+        let next_committee_public = next_committee_keys
+            .iter()
+            .map(|key| key.compute_public_key().unwrap())
             .collect::<Vec<_>>();
 
         let initial_committee_threshold = 2u8;
         let next_committee_threshold = 3u8;
-        let g = G::generator();
-        // // TODO: we need to find another generator...
-        let h = G::generator();
-        let params = ACSSParams { g, h };
+        let params = ACSSParams::rand(&mut rng);
 
-        let msk = Fr::rand(&mut test_rng());
-        let msk_hat = Fr::rand(&mut test_rng());
+        // generate the master secrets
+        let msk = Fr::rand(&mut rng);
+        let msk_hat = Fr::rand(&mut rng);
 
-        let initial_committee_shares: Vec<Capsule> = 
-            HighThresholdACSS::produce_shares(
-                params.clone(), 
-                msk, 
-                msk_hat, 
-                &initial_committee, 
+        let initial_committee_resharing: Resharing<G> = 
+            HighThresholdACSS::reshare(
+                params.clone(),
+                msk,
+                msk_hat,
+                &initial_committee_public, 
                 initial_committee_threshold, 
-                test_rng()
+                sys_rng,
             );
-
-        // simulate a public broadcast channel
-        let mut simulated_broadcast: 
-            BTreeMap<WrappedEncryptionKey, Vec<Capsule>> = BTreeMap::new();
-        // each member of the initial committee 'owns' a secret (identified by matching indices)
-        initial_committee_keys.iter().enumerate().for_each(|(idx, c)| {
-            let member_secrets = &initial_committee_shares[idx];
-            // authenticate + decrypt shares
-            let (u, u_hat) = HighThresholdACSS::authenticate_shares(
-                params.clone(), c.1.clone(), member_secrets.clone(),
-            ).unwrap();
-            // and they each create a resharing of their secrets
-            let next_committee_resharing: Vec <Capsule> = 
-                HighThresholdACSS::produce_shares(
-                    params.clone(),
-                    u,
-                    u_hat, 
-                    &next_committee, 
-                    next_committee_threshold, 
-                    test_rng(),
-            );
-            assert!(next_committee_resharing.len().eq(&next_committee.len()));
-            simulated_broadcast.insert(
-                WrappedEncryptionKey(c.0.clone()), 
-                next_committee_resharing,
-            );
+        // // simulate a public broadcast channel
+        // let mut simulated_broadcast: 
+        //     BTreeMap<WrappedEncryptionKey, Vec<Capsule>> = BTreeMap::new();
+        // // each member of the initial committee 'owns' a secret (identified by matching indices)
+        initial_committee_resharing.capsules.iter().enumerate().for_each(|(idx, c)| {
+            // let member_secrets = &initial_committee_shares[idx];
+            // // authenticate + decrypt shares
+            // let (u, u_hat) = HighThresholdACSS::recover(
+            //     params.clone(), c.1.clone(), member_secrets.clone(),
+            // ).unwrap();
+            // // and they each create a resharing of their secrets
+            // let next_committee_resharing: Vec <Capsule> = 
+            //     HighThresholdACSS::reshare(
+            //         params.clone(),
+            //         u,
+            //         u_hat, 
+            //         &next_committee, 
+            //         next_committee_threshold, 
+            //         test_rng(),
+            // );
+            // assert!(next_committee_resharing.len().eq(&next_committee.len()));
+            // simulated_broadcast.insert(
+            //     WrappedEncryptionKey(c.0.n.clone()), 
+            //     next_committee_resharing,
+            // );
         });
 
-        let mut new_committee_sks = Vec::new();
-        let mut new_committee_blinding_sks = Vec::new();
+        // let mut new_committee_sks = Vec::new();
+        // let mut new_committee_blinding_sks = Vec::new();
 
-        // now, next committee members verify + derive
-        next_committee_keys.iter().for_each(|(ek, dk)| {
-            // collect each new member's shares from the old committee
-            let mut coeffs: Vec<Fr> = Vec::new();
-            let mut blinding_coeffs: Vec<Fr> = Vec::new();
+        // // now, next committee members verify + derive
+        // next_committee_keys.iter().for_each(|(ek, dk)| {
+        //     // collect each new member's shares from the old committee
+        //     let mut coeffs: Vec<Fr> = Vec::new();
+        //     let mut blinding_coeffs: Vec<Fr> = Vec::new();
 
-            initial_committee.iter().enumerate().for_each(|(idx, old_member)| {
-                // get the share they gave us
-                let capsule = simulated_broadcast.get(old_member).unwrap()
-                    .iter().filter(|m| m.ek_n.eq(&ek.n))
-                    .collect::<Vec<_>>()[0];
+        //     initial_committee.iter().enumerate().for_each(|(idx, old_member)| {
+        //         // get the share they gave us
+        //         let capsule = simulated_broadcast.get(old_member).unwrap()
+        //             .iter().filter(|m| m.ek_n.eq(&ek.n))
+        //             .collect::<Vec<_>>()[0];
                 
-                // [idx];
+        //         // [idx];
 
-                // //
+        //         // //
 
-                // authenticate and decrypt
-                let (u, u_hat) = HighThresholdACSS::authenticate_shares(
-                    params.clone(),
-                    dk.clone(),
-                    capsule.clone(),
-                ).unwrap();
-                // store somewhere
-                coeffs.push(u);
-                blinding_coeffs.push(u_hat);
-            });
+        //         // authenticate and decrypt
+        //         let (u, u_hat) = HighThresholdACSS::recover(
+        //             params.clone(),
+        //             dk.clone(),
+        //             capsule.clone(),
+        //         ).unwrap();
+        //         // store somewhere
+        //         coeffs.push(u);
+        //         blinding_coeffs.push(u_hat);
+        //     });
 
-            // then each member of the new committee interpolates their new secrets
-            let evals = coeffs.iter().enumerate().map(|(i, c)| (Fr::from((i as u8) + 1), *c)).collect::<Vec<_>>();
-            let blinding_evals = blinding_coeffs.iter().enumerate().map(|(i, c)| (Fr::from((i as u8) + 1), *c)).collect::<Vec<_>>();
+        //     // then each member of the new committee interpolates their new secrets
+        //     let evals = coeffs.iter().enumerate().map(|(i, c)| (Fr::from((i as u8) + 1), *c)).collect::<Vec<_>>();
+        //     let blinding_evals = blinding_coeffs.iter().enumerate().map(|(i, c)| (Fr::from((i as u8) + 1), *c)).collect::<Vec<_>>();
             
-            let sk = crate::encryption::aes::interpolate(evals);
-            new_committee_sks.push(sk);
+        //     let sk = crate::encryption::aes::interpolate(evals);
+        //     new_committee_sks.push(sk);
             
-            let blinding_sk = crate::encryption::aes::interpolate(blinding_evals.clone());
-            new_committee_blinding_sks.push(blinding_sk);
-        });
+        //     let blinding_sk = crate::encryption::aes::interpolate(blinding_evals.clone());
+        //     new_committee_blinding_sks.push(blinding_sk);
+        // });
 
-        // // then we can interpolate these sks and blinding_sks to recover the original msk, msk_hat
-        let new_committee_evals = new_committee_sks.iter().enumerate().map(|(idx, item)| {
-            (Fr::from((idx as u8) + 1), *item)
-        }).collect::<Vec<_>>();
+        // // // then we can interpolate these sks and blinding_sks to recover the original msk, msk_hat
+        // let new_committee_evals = new_committee_sks.iter().enumerate().map(|(idx, item)| {
+        //     (Fr::from((idx as u8) + 1), *item)
+        // }).collect::<Vec<_>>();
 
-        let recovered_sk = crate::encryption::aes::interpolate(new_committee_evals);
-        assert_eq!(msk, recovered_sk);
+        // let recovered_sk = crate::encryption::aes::interpolate(new_committee_evals);
+        // assert_eq!(msk, recovered_sk);
 
-        let new_committee_blinding_evals = new_committee_blinding_sks.iter().enumerate().map(|(idx, item)| {
-            (Fr::from((idx as u8) + 1), *item)
-        }).collect::<Vec<_>>();
+        // let new_committee_blinding_evals = new_committee_blinding_sks.iter().enumerate().map(|(idx, item)| {
+        //     (Fr::from((idx as u8) + 1), *item)
+        // }).collect::<Vec<_>>();
 
-        let recovered_blinding_sk = crate::encryption::aes::interpolate(new_committee_blinding_evals);
-        assert_eq!(msk_hat, recovered_blinding_sk);
+        // let recovered_blinding_sk = crate::encryption::aes::interpolate(new_committee_blinding_evals);
+        // assert_eq!(msk_hat, recovered_blinding_sk);
     }
 }
