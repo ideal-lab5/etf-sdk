@@ -42,6 +42,15 @@ pub fn sha256(b: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+// TODO: can do this in place instead
+pub fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
+    let mut o = a.to_owned();
+    for (i, ri) in o.iter_mut().enumerate().take(32) {
+        *ri ^= b[i];
+    }
+    o.to_vec()
+}
+
 /// {0, 1}^* -> G1
 pub fn hash_to_g1(b: &[u8]) -> G1Affine {
     let mut nonce = 0u32;

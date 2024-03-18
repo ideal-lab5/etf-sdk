@@ -34,11 +34,11 @@ serde_cbor = {version = "0.11.2", default-features = false }
 chacha20poly1305 = { version = "0.10.1", default-features = false}
 ring = "0.17.8"
 rand_chacha = "0.3.1"
-# kzen-paillier = { git = "https://github.com/ideal-lab5/rust-paillier", default-features = false }
-# curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", default-features = false, features = ["num-bigint"]}
-kzen-paillier = { path = "../../rust-paillier", optional = true}
+kzen-paillier = { git = "https://github.com/ideal-lab5/rust-paillier", optional = true, default-features = false }
+curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", optional = true, default-features = false, features = ["num-bigint"]}
+#kzen-paillier = { path = "../../rust-paillier", optional = true}
 # not exactly no-std compatible...
-curv = { package = "curv-kzen", path = "../../curv", optional = true, features = ["num-bigint"]}
+#curv = { package = "curv-kzen", path = "../../curv", optional = true, features = ["num-bigint"]}
 
 [dev-dependencies]
 hex = "0.4.3"
