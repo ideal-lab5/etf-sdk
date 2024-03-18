@@ -42,6 +42,7 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce
 };
 use crate::{
+    encryption::hashed_el_gamal::HashedElGamal,
     proofs::hashed_el_gamal_sigma::BatchPoK,
     types::ProtocolParams as ACSSParams,
     utils::convert_to_bytes,
@@ -114,7 +115,7 @@ impl HighThresholdACSS {
         next_committee: &[PublicKey<G>],
         t: u8,
         mut rng: R,
-    ) -> Vec<BatchPoK<G>> {
+    ) -> Vec<(PublicKey<G>, Fr, BatchPoK<G>)> {
         // f(x) -> [f(0), {(1, f(1)), ..., (n, f(n))}]
         let evals: BTreeMap<Fr, Fr> = generate_shares_checked(
             msk, next_committee.len() as u8, t, &mut rng);
@@ -127,55 +128,45 @@ impl HighThresholdACSS {
 
         // TODO: check that evals.len == evals_hat.len == next_committe.len ?
         // TODO: error handling
-        let poks: Vec<BatchPoK<G>> = next_committee.iter().enumerate().map(|(idx, pk)| {
+        let poks: Vec<(PublicKey<G>, Fr, BatchPoK<G>)> = 
+            next_committee.iter().enumerate().map(|(idx, pk)| {
             // the committee member's 'position' as a scalar field element
             let i = Fr::from((idx as u8) + 1);
             // calculate shares
             let x = evals.get(&i).unwrap();
             let x_prime = evals_hat.get(&i).unwrap();
-            BatchPoK::prove(&vec![*x, *x_prime], *pk, &mut rng)
+            (*pk, i, BatchPoK::prove(&vec![*x, *x_prime], *pk, &mut rng))
         }).collect::<Vec<_>>();
 
         poks
     }
 
-    /// decrypt shares + authenticate
+    /// decrypt shares + authenticate from a collection of batched HEG NIZK PoKs
     /// outputs the new share and its blinding share
+    /// assumes default the generator is used
+    //
     pub fn recover(
+        sk: Fr, 
+        idx: Fr, 
+        poks: Vec<BatchPoK<G>>,
     ) -> Result<(Fr, Fr), ACSSError>  {
 
-        // // TODO: store bytes in the struct instead?
-        // let mut g_bytes = Vec::new();
-        // params.g.serialize_compressed(&mut g_bytes).unwrap();
-        // let mut h_bytes = Vec::new();
-        // params.h.serialize_compressed(&mut h_bytes).unwrap();
+        let q = G::generator() * sk;
 
-        // let statement = MultiDLogStatement {
-        //     g: g_bytes, 
-        //     h: h_bytes,
-        //     ciphertext: capsule.enc_xu.clone(),
-        //     ciphertext_prime: capsule.enc_xu_prime.clone(),
-        //     dlog: capsule.dlog,
-        //     ek_n: capsule.ek_n,
-        // };
+        let mut secrets = Vec::new();
+        let mut blinding_secrets = Vec::new();
 
-        // capsule.proof.verify(&statement)
-        //     .map_err(|_| ACSSError::InvalidProof)?;
+        for pok in poks {
+            if !pok.verify(q) {
+                return Err(ACSSError::InvalidProof);
+            }
+            secrets.push((idx, HashedElGamal::decrypt(sk, pok.ciphertexts[0].clone())));
+            blinding_secrets.push((idx, HashedElGamal::decrypt(sk, pok.ciphertexts[1].clone())));
+        }
 
-        // let x = Paillier::decrypt(
-        //     &dk, 
-        //     RawCiphertext::from(&capsule.enc_xu)
-        // ).0.into_owned();
-        // let x_prime = Paillier::decrypt(
-        //     &dk, 
-        //     RawCiphertext::from(&capsule.enc_xu_prime)
-        // ).0.into_owned();
-
-        // let s: Fr = Fr::from_be_bytes_mod_order(&x.to_bytes());
-        // let s_prime: Fr = Fr::from_be_bytes_mod_order(&x_prime.to_bytes());
-
-        // Ok((s, s_prime))
-        Err(ACSSError::InvalidProof)
+        let s = crate::utils::interpolate::<G>(secrets);
+        let s_prime = crate::utils::interpolate::<G>(blinding_secrets);
+        Ok((s, s_prime))
     }
 }
 
@@ -203,6 +194,7 @@ pub mod tests {
     use ark_ec::Group;
     use ark_std::{test_rng, rand::SeedableRng};
 
+    use rand_chacha::ChaCha20Rng;
     use ark_poly::{
         polynomial::univariate::DensePolynomial,
         DenseUVPolynomial, Polynomial,
@@ -212,11 +204,65 @@ pub mod tests {
     // Given a committee that holds a secret msk where each member has  secret share,
     // we want to share the msk with a new committee while only providing new shares
     #[test]
-    pub fn basic_reshare_works() {
+    pub fn basic_reshare_and_recover_works() {
         let m = 2;
         let n = 5;
 
-        let msk = Fr::rand(&mut test_rng());
+        let mut rng = ChaCha20Rng::seed_from_u64(0);
 
+        let msk = Fr::rand(&mut rng);
+        let msk_prime = Fr::rand(&mut rng);
+
+        let initial_committee_secret_keys = (0..m).map(|i| (Fr::rand(&mut rng)))
+            .collect::<Vec<_>>();
+
+        let initial_committee_public_keys = initial_committee_secret_keys.iter()
+            .map(|sk| G::generator().mul(sk))
+            .collect::<Vec<_>>();
+
+        // panic!("{:?}", initial_committee_public_keys);
+
+        // first we reshare to the first committee
+        let poks = HighThresholdACSS::reshare(
+            msk, 
+            msk_prime, 
+            &initial_committee_public_keys,
+            m,
+            &mut rng
+        );
+        assert_eq!(m, poks.len() as u8);
+        assert_eq!(initial_committee_public_keys[0], poks[0].0);
+        assert_eq!(initial_committee_public_keys[1], poks[1].0);
+
+        // and finally we interpolate the recovered secrets to get back msk and msk_primes
+        let mut recovered_shares: Vec<(Fr, Fr)> = Vec::new();
+        let mut recovered_blinding_shares: Vec<(Fr, Fr)> = Vec::new();
+
+        // then each committee member should be able to reconsruct their shares
+        initial_committee_secret_keys.iter().enumerate().for_each(|(idx, sk)| {
+            // identify your PoKs based on public key
+            let pk = G::generator().mul(sk);
+
+            let my_poks: Vec<(Fr, BatchPoK<G>)> = poks.clone()
+                .into_iter()
+                .filter(|p| p.0 == pk)
+                .map(|p| (p.1, p.2.clone()))
+                .collect::<Vec<_>>();
+
+            let f_elem = my_poks[0].0;
+            match HighThresholdACSS::recover(*sk, f_elem, my_poks.iter().map(|p| p.1.clone()).collect::<Vec<_>>()) {
+                Ok(data) => {
+                    recovered_shares.push((f_elem, data.0));
+                    recovered_blinding_shares.push((f_elem, data.1));
+                }, 
+                Err(_) => panic!("the secrets should be recoverable"),
+            }
+        });
+
+        let final_recovered_msk = crate::utils::interpolate::<G>(recovered_shares);
+        let final_recovered_msk_prime = crate::utils::interpolate::<G>(recovered_blinding_shares);
+
+        assert_eq!(msk, final_recovered_msk);
+        assert_eq!(msk_prime, final_recovered_msk_prime);
     }
 }

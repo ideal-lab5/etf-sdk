@@ -1,6 +1,6 @@
 use sha2::Digest;
 
-use ark_ff::PrimeField;
+use ark_ff::{Field, PrimeField, Zero, One};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_bls12_381::{Fr, G1Affine};
@@ -105,6 +105,48 @@ pub fn convert_to_bytes<E: CanonicalSerialize, const N: usize>(k: E) -> [u8;N] {
 	k.serialize_compressed(&mut out).unwrap_or(());
 	let o: [u8; N] = out.try_into().unwrap_or([0;N]);
 	o
+}
+
+
+/// TODO: move this to a common place
+/// interpolate a polynomial from the input and evaluate it at 0
+/// P(X) = sum_{i = 0} ^n y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj))
+///
+/// * `evalulation`: a vec of (x, f(x)) pairs
+///
+pub fn interpolate<C: CurveGroup>(points: Vec<(C::ScalarField, C::ScalarField)>) -> C::ScalarField {
+    let n = points.len();
+
+    // Calculate the Lagrange basis polynomials evaluated at 0
+    let mut lagrange_at_zero: Vec<C::ScalarField> = Vec::with_capacity(n);
+    for i in 0..n {
+
+        // build \prod_{j=0}^n [j != i] (x-xj/xi - xj)
+        let mut basis_value = C::ScalarField::one();
+        for j in 0..n {
+            if j != i {
+                let denominator = points[i].0 - points[j].0;
+                // Check if the denominator is zero before taking the inverse
+                if denominator.is_zero() {
+                    // Handle the case when the denominator is zero (or very close to zero)
+                    return C::ScalarField::zero();
+                }
+                let numerator = C::ScalarField::zero() - points[j].0;
+                // Use the precomputed inverse
+                basis_value *= numerator * denominator.inverse().unwrap();
+            }
+        }
+        lagrange_at_zero.push(basis_value);
+    }
+
+    // Interpolate the value at 0
+    // compute  sum_{i = 0} ^n (y_i * sum... )
+    let mut interpolated_value = C::ScalarField::zero();
+    for i in 0..n {
+        interpolated_value += points[i].1 * lagrange_at_zero[i];
+    }
+
+    interpolated_value
 }
 
 #[cfg(test)]
