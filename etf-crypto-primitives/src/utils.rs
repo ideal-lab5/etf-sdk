@@ -9,6 +9,9 @@ use ark_std::vec::Vec;
 use kzen_paillier::{DecryptionKey, EncryptionKey, KeyGeneration, Keypair, Paillier};
 use serde::{Serialize, Deserialize};
 
+// use core::borrow::Borrow;
+use alloc::borrow::ToOwned;
+
 #[cfg(feature = "std")]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KeypairWrapper {
@@ -46,6 +49,14 @@ pub fn sha256(b: &[u8]) -> Vec<u8> {
 pub fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
     let mut o = a.to_owned();
     for (i, ri) in o.iter_mut().enumerate().take(32) {
+        *ri ^= b[i];
+    }
+    o.to_vec()
+}
+
+pub fn cross_product<const N: usize>(a: &[u8;N], b: &[u8;N]) -> Vec<u8> {
+    let mut o = a.to_owned();
+    for (i, ri) in o.iter_mut().enumerate().take(N) {
         *ri ^= b[i];
     }
     o.to_vec()

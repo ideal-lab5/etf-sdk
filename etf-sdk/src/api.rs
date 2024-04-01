@@ -1,7 +1,7 @@
 use etf_crypto_primitives::{
     proofs::{dleq::DLEQProof, verifier::DleqVerifier},
     ibe::fullident::Ibe,
-    client::etf_client::{AesIbeCt, EtfClient, DecryptionResult},
+    encryption::tlock::{AesIbeCt, Tlock, DecryptionResult},
 };
 
 use rand_chacha::ChaCha20Rng;
@@ -15,7 +15,7 @@ pub enum Error {
 }
 
 // these are the funcs that I want to compile to wasm
-pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
+pub trait EtfApi<D: DleqVerifier, I: Ibe, E: Tlock<I>> {
 
     /// verify the DLEQ proof
     fn verify(
@@ -47,15 +47,15 @@ pub trait EtfApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
 ///  the default implementation of the etf api
 /// https://stackoverflow.com/questions/50200197/how-do-i-share-a-struct-containing-a-phantom-pointer-among-threads
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
-// pub struct DefaultApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
-pub struct DefaultApi<D: DleqVerifier, I: Ibe, E: EtfClient<I>> {
+// pub struct DefaultApi<D: DleqVerifier, I: Ibe, E: Tlock<I>> {
+pub struct DefaultApi<D: DleqVerifier, I: Ibe, E: Tlock<I>> {
     // ibe: BfIbe,
     _d: ark_std::marker::PhantomData<fn() -> D>,
     _i: ark_std::marker::PhantomData<fn() -> I>,
     _e: ark_std::marker::PhantomData<fn() -> E>,
 }
 
-impl<D: DleqVerifier, I: Ibe, E: EtfClient<I>> EtfApi<D, I, E> for DefaultApi<D, I, E>  {
+impl<D: DleqVerifier, I: Ibe, E: Tlock<I>> EtfApi<D, I, E> for DefaultApi<D, I, E>  {
 
     /// verify a dleq proof using the IbeDleqVerifier
     /// The verifier expects a specific G1 generator and a specific hash to g1 function
@@ -115,7 +115,7 @@ pub mod tests {
     use ark_serialize::CanonicalSerialize;
     use etf_crypto_primitives::{
         utils::hash_to_g1,
-        client::etf_client::{AesIbeCt, ClientError},
+        encryption::tlock::{AesIbeCt, ClientError},
         ibe::fullident::{IbeCiphertext, Ibe, IbeError},
         encryption::aes::AESOutput,
         utils::convert_to_bytes,
@@ -132,10 +132,10 @@ pub mod tests {
         }
     }
  
-    // A mock implementation of EtfClient trait for testing
-    struct MockEtfClient;
+    // A mock implementation of Tlock trait for testing
+    struct MockTlock;
 
-    impl<I: Ibe> EtfClient<I> for MockEtfClient {
+    impl<I: Ibe> Tlock<I> for MockTlock {
         // Implement the required methods for the trait
  
         fn encrypt<R: Rng + CryptoRng + Sized>(
@@ -200,7 +200,7 @@ pub mod tests {
 
         let proof = DLEQProof::new(x, g, h, vec![], test_rng());
         assert!(
-            DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::verify(
+            DefaultApi::<MockDleqVerifier, MockIbe, MockTlock>::verify(
                 id.to_vec(), proof, vec![]) == true);
     }
 
@@ -216,7 +216,7 @@ pub mod tests {
         let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
-        match DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::
+        match DefaultApi::<MockDleqVerifier, MockIbe, MockTlock>::
             encrypt(ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(), message, slot_ids, t, b"seed") {
                 Ok(_) => { },
                 Err(_) => { panic!("the encrypt call should work") },
@@ -225,7 +225,7 @@ pub mod tests {
 
     #[test]
     fn api_decryption_works() {
-        match DefaultApi::<MockDleqVerifier, MockIbe, MockEtfClient>::
+        match DefaultApi::<MockDleqVerifier, MockIbe, MockTlock>::
             decrypt(vec![], vec![], vec![], vec![vec![1]], vec![]) {
                 Ok(_) => { },
                 Err(_) => { panic!("the decrypt call should work") },

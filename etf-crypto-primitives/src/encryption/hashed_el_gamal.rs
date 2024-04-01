@@ -9,14 +9,22 @@
 
 use ark_ec::{CurveGroup};
 use ark_ff::UniformRand;
-use ark_std::rand::Rng;
+use ark_std::{rand::Rng, vec::Vec};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use core::marker::PhantomData;
-use crate::utils::cross_product_32;
+use serde::{Deserialize, Serialize};
+use crate::{
+    ser::{ark_se, ark_de},
+    utils::cross_product_32
+};
+
+// TODO should make this generic (N - sized)
+pub type Message = [u8;32];
 
 /// the ciphertext type
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, CanonicalDeserialize, CanonicalSerialize)]
 pub struct Ciphertext<C: CurveGroup> {
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub c1: C,
     pub c2: [u8; 32], 
 }
@@ -40,8 +48,10 @@ pub struct HashedElGamal<C: CurveGroup> {
 
 impl<C: CurveGroup> HashedElGamal<C> {
 
+    /// Encrypt the hash of a message
+    /// Q: should I incorporate the hashing into this as well? seems fruitless since we can't recover it anyway
     pub fn encrypt<R: Rng + Sized>(
-        secret: C::ScalarField, 
+        message: Message,
         pk: C, 
         generator: C,
         mut rng: R,
@@ -49,13 +59,10 @@ impl<C: CurveGroup> HashedElGamal<C> {
         let r = C::ScalarField::rand(&mut rng);
         let c1 = generator.mul(r);
         let inner = pk.mul(r);
-        
-        let mut secret_bytes = Vec::new();
-        secret.serialize_compressed(&mut secret_bytes).unwrap();
 
-        let c2: [u8;32] = crate::utils::cross_product_32(
-            &crate::utils::h2(inner), 
-            &secret_bytes
+        let c2: [u8;32] = crate::utils::cross_product::<32>(
+            &crate::utils::h2(inner).try_into().unwrap(), 
+            &message
         ).try_into().unwrap();
 
         Ciphertext{ c1, c2 }
@@ -67,13 +74,12 @@ impl<C: CurveGroup> HashedElGamal<C> {
     pub fn decrypt(
         sk: C::ScalarField, 
         ciphertext: Ciphertext<C>
-    ) -> C::ScalarField {
+    ) -> Message {
         let s = ciphertext.c1.mul(sk);
-        let c2: [u8;32] = crate::utils::cross_product_32(
+        crate::utils::cross_product_32(
             &crate::utils::h2(s), 
             &ciphertext.c2,
-        ).try_into().unwrap();
-        C::ScalarField::deserialize_compressed(&c2[..]).unwrap()
+        ).try_into().unwrap()
     }
 
 }
@@ -98,9 +104,11 @@ impl<C: CurveGroup> HashedElGamal<C> {
         let pk = G1::generator().mul(sk);
 
         let secret = Fr::rand(&mut test_rng());
+        let mut secret_bytes = Vec::new();
+        secret.serialize_compressed(&mut secret_bytes).unwrap();
         
-        let ct = HashedElGamal::encrypt(secret, pk, G1::generator(), &mut test_rng());
-        let recovered = HashedElGamal::decrypt(sk, ct);
-        assert_eq!(recovered, secret);
+        let ct = HashedElGamal::encrypt(secret_bytes.clone().try_into().unwrap(), pk, G1::generator(), &mut test_rng());
+        let recovered_bytes = HashedElGamal::decrypt(sk, ct);
+        assert_eq!(recovered_bytes.to_vec(), secret_bytes);
     }
 }

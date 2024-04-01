@@ -6,7 +6,7 @@ use ark_ec::AffineRepr;
 use etf_crypto_primitives::{
     ibe::fullident::BfIbe,
     proofs::verifier::IbeDleqVerifier,
-    client::etf_client::DefaultEtfClient,
+    encryption::tlock::DefaultTlock,
     utils::{convert_to_bytes, hash_to_g1},
 };
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,7 @@ pub enum ApiError {
 
 // TODO: enhance error types (using thiserror?)
 
-/// a wrapper around the DefaultEtfClient so that it can be compiled to wasm
+/// a wrapper around the DefaultTlock so that it can be compiled to wasm
 #[wasm_bindgen]
 pub struct EtfApiWrapper {    
     pps: (JsValue, JsValue),
@@ -70,7 +70,7 @@ impl EtfApiWrapper {
             .map_err(|_| JsError::new("could not decode seed"))?;
         // TODO: this should probably be an async future... in the future
         let out = 
-            DefaultApi::<IbeDleqVerifier, BfIbe, DefaultEtfClient<BfIbe>>::encrypt(
+            DefaultApi::<IbeDleqVerifier, BfIbe, DefaultTlock<BfIbe>>::encrypt(
                 ibe_pp, p_pub, &message, slot_ids, t, &seed)
                     .map_err(|_| JsError::new("encrypt failed"))?;
         serde_wasm_bindgen::to_value(&out)
@@ -97,7 +97,7 @@ impl EtfApiWrapper {
         let sks: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(sks_bytes)
             .map_err(|_| JsError::new("could not decode the secret keys"))?;
         let out = 
-            DefaultApi::<IbeDleqVerifier, BfIbe, DefaultEtfClient<BfIbe>>::decrypt(
+            DefaultApi::<IbeDleqVerifier, BfIbe, DefaultTlock<BfIbe>>::decrypt(
                 ibe_pp, ct, nonce, capsule, sks)
                 .map_err(|_| JsError::new("decryption failed"))?;
         serde_wasm_bindgen::to_value(&out)

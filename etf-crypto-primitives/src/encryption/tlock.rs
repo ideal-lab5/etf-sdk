@@ -43,7 +43,7 @@ pub enum ClientError {
     VectorDimensionMismatch,
 }
 
-pub trait EtfClient<I: Ibe> {
+pub trait Tlock<I: Ibe> {
     
     fn encrypt<R: Rng + CryptoRng + Sized>(
         ibe_pp: Vec<u8>,
@@ -63,13 +63,13 @@ pub trait EtfClient<I: Ibe> {
     ) -> Result<DecryptionResult, ClientError>;
 }
 
-pub struct DefaultEtfClient<I> {
+pub struct DefaultTlock<I> {
     _i: PhantomData<I>,
 }
 
 /// a clent to setup and perform IBE functions
 /// uses known generator of G2 and other ranomd generator point
-impl<I: Ibe> EtfClient<I> for DefaultEtfClient<I> {
+impl<I: Ibe> Tlock<I> for DefaultTlock<I> {
 
     /// Encrypts a message using AES-GCM, with the secret key having been generated via SSS
     /// Then, encrypt each share for the input ids (assumes sequential)
@@ -205,7 +205,7 @@ mod test {
         let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
-        match DefaultEtfClient::<BfIbe>::encrypt(
+        match DefaultTlock::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
             message, ids.clone(), t, rng,
         ) {
@@ -216,7 +216,7 @@ mod test {
                     let d = q.mul(s);
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
-                match DefaultEtfClient::<BfIbe>::decrypt(
+                match DefaultTlock::<BfIbe>::decrypt(
                     ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets, 
                 ) {
                     Ok(decryption_result) => {
@@ -252,7 +252,7 @@ mod test {
         let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
-        match DefaultEtfClient::<BfIbe>::encrypt(
+        match DefaultTlock::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
             message, ids.clone(), t, rng
         ) {
@@ -263,7 +263,7 @@ mod test {
                     let d = q.mul(s);
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
-                match DefaultEtfClient::<BfIbe>::decrypt(
+                match DefaultTlock::<BfIbe>::decrypt(
                     ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets, 
                 ) {
                     Ok(decryption_result) => {
@@ -287,7 +287,7 @@ mod test {
         let p_pub_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
 
         // bad 'p'
-        match DefaultEtfClient::<BfIbe>::encrypt(
+        match DefaultTlock::<BfIbe>::encrypt(
             vec![],
             p_pub_bytes.to_vec(),
             b"test", vec![], 2, rng.clone()
@@ -301,7 +301,7 @@ mod test {
         }
 
         // bad 'q' 
-        match DefaultEtfClient::<BfIbe>::encrypt(
+        match DefaultTlock::<BfIbe>::encrypt(
             p_pub_bytes.to_vec(),
             vec![],
             b"test", vec![], 2, rng,
@@ -318,7 +318,7 @@ mod test {
     #[test]
     pub fn client_decrypt_fails_with_bad_encoding_p() {
         // bad 'p'
-        match DefaultEtfClient::<BfIbe>::decrypt(
+        match DefaultTlock::<BfIbe>::decrypt(
             vec![], vec![], vec![], vec![], vec![], 
         ) {
             Ok(_) => {
@@ -337,7 +337,7 @@ mod test {
         let cap = vec![vec![1,2,3]];
         let sks = vec![vec![1]];
         // bad capsule
-        match DefaultEtfClient::<BfIbe>::decrypt(
+        match DefaultTlock::<BfIbe>::decrypt(
             p_pub_bytes.to_vec(), vec![], vec![], cap, sks, 
         ) {
             Ok(_) => {
@@ -368,7 +368,7 @@ mod test {
         let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
-        match DefaultEtfClient::<BfIbe>::encrypt(
+        match DefaultTlock::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
             message, ids.clone(), t, rng,
         ) {
@@ -381,7 +381,7 @@ mod test {
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
                 secrets[0] = vec![];
-                match DefaultEtfClient::<BfIbe>::decrypt(
+                match DefaultTlock::<BfIbe>::decrypt(
                     ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, 
                     ct.aes_ct.nonce, ct.etf_ct, secrets, 
                 ) {
@@ -416,7 +416,7 @@ mod test {
         let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
-        match DefaultEtfClient::<BfIbe>::encrypt(
+        match DefaultTlock::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
             message, ids.clone(), t, rng,
         ) {
@@ -427,7 +427,7 @@ mod test {
                     let d = q.mul(s);
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
-                match DefaultEtfClient::<BfIbe>::decrypt(
+                match DefaultTlock::<BfIbe>::decrypt(
                     ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, 
                     vec![0,0,0,0,0,0,0,0,0,0,0,0], ct.etf_ct, secrets, 
                 ) {
@@ -462,7 +462,7 @@ mod test {
         let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
         let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
 
-        match DefaultEtfClient::<BfIbe>::encrypt(
+        match DefaultTlock::<BfIbe>::encrypt(
             ibe_pp_bytes.to_vec(), 
             p_pub_bytes.to_vec(),
             message, 
@@ -477,7 +477,7 @@ mod test {
                     let d = q.mul(s);
                     convert_to_bytes::<G1, 48>(d.into()).to_vec()
                 }).collect::<Vec<_>>();
-                match DefaultEtfClient::<BfIbe>::decrypt(
+                match DefaultTlock::<BfIbe>::decrypt(
                     ibe_pp_bytes.to_vec(), vec![], 
                     ct.aes_ct.nonce, ct.etf_ct, secrets, 
                 ) {

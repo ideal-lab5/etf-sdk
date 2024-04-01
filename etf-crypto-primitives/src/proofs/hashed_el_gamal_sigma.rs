@@ -18,15 +18,18 @@
 // #![no_std]
 use ark_ec::CurveGroup;
 use ark_ff::{fields::PrimeField, UniformRand, Zero};
-use ark_serialize::{CanonicalSerialize, SerializationError};
+use ark_serialize::{CanonicalSerialize, CanonicalDeserialize, SerializationError};
 use ark_std::{marker::PhantomData, rand::Rng, vec::Vec};
 use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
     Shake128,
 };
 use serde::{Deserialize, Serialize};
-use crate::types::ProtocolParams as Params;
-use crate::encryption::hashed_el_gamal::{Ciphertext, HashedElGamal};
+use crate::{
+    encryption::hashed_el_gamal::{Ciphertext, HashedElGamal},
+    types::ProtocolParams as Params,
+    ser::{ark_de, ark_se},
+};
 
 // a public commitment for a point in the curbe group's scalar field
 pub type Commitment<C> = C;
@@ -37,30 +40,38 @@ pub enum Error {
 }
 
 /// the NIZK PoK
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct PoK<C: CurveGroup> {
     /// the commitment to the random value (e.g. rG)
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub s: C,
     /// the 'blinding' commitment to the random value (e.g. rH)
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub t: C,
     /// the challenge (e.g. z = k + es)
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub z: C::ScalarField,
     /// the commitment to the secret input
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub commitment: C,
     /// the (hashed el gamal) ciphertext
     pub ciphertext: Ciphertext<C>,
 }
 
 /// the NIZK PoK with support for batched ciphertexts
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, CanonicalSerialize, CanonicalDeserialize)]
 pub struct BatchPoK<C: CurveGroup> {
     /// the commitment to the random value (e.g. rG)
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub s: C,
     /// the 'blinding' commitment to the random value (e.g. rH)
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub t: C,
     /// the challenge (e.g. z = k + es)
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub z: C::ScalarField,
     /// the commitment to the secret input
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub commitment: C,
     /// the (hashed el gamal) ciphertexts
     pub ciphertexts: Vec<Ciphertext<C>>,
@@ -81,7 +92,9 @@ impl<C: CurveGroup> PoK<C> {
         params: Params<C>,
         mut rng: R,
     ) -> Self {
-        let ciphertext = HashedElGamal::encrypt(message, params.h, params.g, &mut rng);
+        let mut message_bytes = Vec::new();
+        message.serialize_compressed(&mut message_bytes).unwrap();
+        let ciphertext = HashedElGamal::encrypt(message_bytes.try_into().unwrap(), params.h, params.g, &mut rng);
         let commitment: Commitment<C> = params.g * message + params.h * message;
 
         let k = C::ScalarField::rand(&mut rng);
@@ -165,9 +178,14 @@ impl<C: CurveGroup> BatchPoK<C> {
         mut rng: R,
     ) -> BatchPoK<C> {
         let g = C::generator();
+        
         let aggregated_messages = (0..messages.len()).fold(C::ScalarField::zero(), |acc, val| acc + messages[val]);
+
         let batch_data: Vec<(Ciphertext<C>, Commitment<C>)> = messages.into_iter().map(|m| {
-            let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(*m, pk, g, &mut rng);
+            let mut message_bytes = Vec::new();
+            m.serialize_compressed(&mut message_bytes).unwrap();
+            // TODO: error handling
+            let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(message_bytes.try_into().unwrap(), pk, g, &mut rng);
             let commitment: Commitment<C> = g * m + pk * m;
             (ciphertext, commitment)
         }).collect::<Vec<_>>();
@@ -299,7 +317,10 @@ mod test {
 
         // and we can decrypt the ciphertext
         let recovered = HashedElGamal::decrypt(x, proof.ciphertext);
-        assert_eq!(recovered, message);
+
+        let mut message_bytes = Vec::new();
+        message.serialize_compressed(&mut message_bytes).unwrap();
+        assert_eq!(recovered.to_vec(), message_bytes);
     }
 
     #[test]
@@ -309,6 +330,12 @@ mod test {
         let x = <JubJub as Group>::ScalarField::rand(&mut rng);
         let m1 = <JubJub as Group>::ScalarField::rand(&mut rng);
         let m2 = <JubJub as Group>::ScalarField::rand(&mut rng);
+
+        let mut m1_bytes = Vec::new();
+        m1.serialize_compressed(&mut m1_bytes).unwrap();
+
+        let mut m2_bytes = Vec::new();
+        m2.serialize_compressed(&mut m2_bytes).unwrap();
         
         let g: JubJub = JubJub::generator().into();
         // the public key
@@ -320,9 +347,9 @@ mod test {
 
         assert_eq!(2, proof.ciphertexts.clone().len());
         let n1 = HashedElGamal::decrypt(x, proof.ciphertexts[0].clone());
-        assert_eq!(m1, n1);
+        assert_eq!(m1_bytes, n1);
         let n2 = HashedElGamal::decrypt(x, proof.ciphertexts[1].clone());
-        assert_eq!(m2, n2);
+        assert_eq!(m2_bytes, n2);
     }
 
     #[test]

@@ -26,6 +26,7 @@ ark-std = { version = "0.4.0", default-features = false }
 ark-ff = { version = "0.4.0", default-features = false }
 ark-poly = { version = "0.4.0", default-features = false }
 ark-ec = { version = "0.4.0", default-features = false }
+
 ark-serialize = { version = "0.4.0", default-features = false }
 ark-bls12-381 = { version = "0.4.0", features = ["curve"], default-features = false }
 # paillier deps
@@ -33,12 +34,9 @@ serde_json = { version = "1.0.108", default-features = false, features = ["alloc
 serde_cbor = {version = "0.11.2", default-features = false }
 chacha20poly1305 = { version = "0.10.1", default-features = false}
 ring = "0.17.8"
-rand_chacha = "0.3.1"
+rand_chacha = { version = "0.3.1", default-features = false }
 kzen-paillier = { git = "https://github.com/ideal-lab5/rust-paillier", optional = true, default-features = false }
 curv = { package = "curv-kzen", git = "https://github.com/ideal-lab5/curv", optional = true, default-features = false, features = ["num-bigint"]}
-#kzen-paillier = { path = "../../rust-paillier", optional = true}
-# not exactly no-std compatible...
-#curv = { package = "curv-kzen", path = "../../curv", optional = true, features = ["num-bigint"]}
 
 [dev-dependencies]
 hex = "0.4.3"
@@ -59,6 +57,7 @@ std = [
     "ark-bls12-381/std",
     "serde_json/std",
     "serde_cbor/std",
+    "rand_chacha/std",
     "chacha20poly1305/std",
     "curv",
     "kzen-paillier",
