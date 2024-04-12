@@ -49,7 +49,8 @@ pub struct HashedElGamal<C: CurveGroup> {
 impl<C: CurveGroup> HashedElGamal<C> {
 
     /// Encrypt the hash of a message
-    /// Q: should I incorporate the hashing into this as well? seems fruitless since we can't recover it anyway
+    /// r <- Zp
+    /// <c1, c2> = <rP, pk (+) H(message)>
     pub fn encrypt<R: Rng + Sized>(
         message: Message,
         pk: C, 
@@ -75,7 +76,9 @@ impl<C: CurveGroup> HashedElGamal<C> {
         sk: C::ScalarField, 
         ciphertext: Ciphertext<C>
     ) -> Message {
+        // s = sk * c1
         let s = ciphertext.c1.mul(sk);
+        // m = s (+) c2
         crate::utils::cross_product_32(
             &crate::utils::h2(s), 
             &ciphertext.c2,

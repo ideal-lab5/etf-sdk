@@ -64,46 +64,44 @@ pub fn encrypt<R: Rng + CryptoRng + Sized>(
 /// * `key`: the key used for encryption
 ///
 pub fn decrypt(
-    ciphertext: Vec<u8>, 
-    nonce_slice: &[u8], 
-    key: &[u8],
+    ct: AESOutput,
+    // ciphertext: Vec<u8>, 
+    // nonce_slice: &[u8], 
+    // key: &[u8],
 ) -> Result<Vec<u8>, Error> {
-    // not sure about that...
-    let cipher = Aes256Gcm::new_from_slice(key)
+    let cipher = Aes256Gcm::new_from_slice(&ct.key)
         .map_err(|_| Error::InvalidKey)?;
-    let nonce = Nonce::from_slice(nonce_slice);
-    let plaintext = cipher.decrypt(nonce, ciphertext.as_ref())
+    let nonce = Nonce::from_slice(&ct.nonce);
+    let plaintext = cipher.decrypt(nonce, ct.ciphertext.as_ref())
         .map_err(|_| Error::DecryptionError)?;
     Ok(plaintext)
 }
 
-/// TODO: move to common file
-/// TODO: refactor/rename
-/// Generate a random polynomial f and return evalulations (f(0), (1, f(1), ..., n, f(n)))
-/// f(0) is the 'secret' and the shares can be used to recover the secret with `let s = interpolate(shares);`
-///
-/// * `n`: The number of shares to generate
-/// * `t`: The degree of the polynomial (i.e. the threhsold)
-/// * `rng`: A random number generator
-///
-pub fn generate_secrets<R: Rng + Sized>(
-    n: u8, t: u8, mut rng: R
-) -> (Fr, Vec<(Fr, Fr)>) {
+// /// Generate a random polynomial f and return evalulations (f(0), (1, f(1), ..., n, f(n)))
+// /// f(0) is the 'secret' and the shares can be used to recover the secret with `let s = interpolate(shares);`
+// ///
+// /// * `n`: The number of shares to generate
+// /// * `t`: The degree of the polynomial (i.e. the threhsold)
+// /// * `rng`: A random number generator
+// ///
+// pub fn generate_secrets<E: EngineBLS, R: Rng + Sized>(
+//     n: u8, t: u8, mut rng: R
+// ) -> (E::Scalar, Vec<(E::Scalar, E::Scalar)>) {
     
-    if n == 1 {
-        let r = Fr::rand(&mut rng);
-        return (r, vec![(Fr::zero(), r)]);
-    }
+//     if n == 1 {
+//         let r = E::Scalar::rand(&mut rng);
+//         return (r, vec![(Fr::zero(), r)]);
+//     }
 
-    let f = DensePolynomial::<Fr>::rand(t as usize, &mut rng);
-    let msk = f.evaluate(&Fr::zero());
-    let evals: Vec<(Fr, Fr)> = (1..n+1)
-        .map(|i| {
-            let e = Fr::from(i);
-            (e, f.evaluate(&e))
-        }).collect();
-    (msk, evals)
-}
+//     let f = DensePolynomial::<E::Scalar>::rand(t as usize, &mut rng);
+//     let msk = f.evaluate(&E::Scalar::zero());
+//     let evals: Vec<(E::Scalar, E::Scalar)> = (1..n+1)
+//         .map(|i| {
+//             let e = E::Scalar::from(i);
+//             (e, f.evaluate(&e))
+//         }).collect();
+//     (msk, evals)
+// }
 
 // pub fn generate_shares_checked<R: Rng + Sized>(
 //     s: Fr, n: u8, t: u8, mut rng: R
@@ -127,46 +125,46 @@ pub fn generate_secrets<R: Rng + Sized>(
 //     evals
 // }
 
-/// TODO: move this to a common place
-/// interpolate a polynomial from the input and evaluate it at 0
-/// P(X) = sum_{i = 0} ^n y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj))
-///
-/// * `evalulation`: a vec of (x, f(x)) pairs
-///
-pub fn interpolate(points: Vec<(Fr, Fr)>) -> Fr {
-    let n = points.len();
+// /// TODO: move this to a common place
+// /// interpolate a polynomial from the input and evaluate it at 0
+// /// P(X) = sum_{i = 0} ^n y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj))
+// ///
+// /// * `evalulation`: a vec of (x, f(x)) pairs
+// ///
+// pub fn interpolate(points: Vec<(Fr, Fr)>) -> Fr {
+//     let n = points.len();
 
-    // Calculate the Lagrange basis polynomials evaluated at 0
-    let mut lagrange_at_zero: Vec<Fr> = Vec::with_capacity(n);
-    for i in 0..n {
+//     // Calculate the Lagrange basis polynomials evaluated at 0
+//     let mut lagrange_at_zero: Vec<Fr> = Vec::with_capacity(n);
+//     for i in 0..n {
 
-        // build \prod_{j=0}^n [j != i] (x-xj/xi - xj)
-        let mut basis_value = Fr::one();
-        for j in 0..n {
-            if j != i {
-                let denominator = points[i].0 - points[j].0;
-                // Check if the denominator is zero before taking the inverse
-                if denominator.is_zero() {
-                    // Handle the case when the denominator is zero (or very close to zero)
-                    return Fr::zero();
-                }
-                let numerator = Fr::zero() - points[j].0;
-                // Use the precomputed inverse
-                basis_value *= numerator * denominator.inverse().unwrap();
-            }
-        }
-        lagrange_at_zero.push(basis_value);
-    }
+//         // build \prod_{j=0}^n [j != i] (x-xj/xi - xj)
+//         let mut basis_value = Fr::one();
+//         for j in 0..n {
+//             if j != i {
+//                 let denominator = points[i].0 - points[j].0;
+//                 // Check if the denominator is zero before taking the inverse
+//                 if denominator.is_zero() {
+//                     // Handle the case when the denominator is zero (or very close to zero)
+//                     return Fr::zero();
+//                 }
+//                 let numerator = Fr::zero() - points[j].0;
+//                 // Use the precomputed inverse
+//                 basis_value *= numerator * denominator.inverse().unwrap();
+//             }
+//         }
+//         lagrange_at_zero.push(basis_value);
+//     }
 
-    // Interpolate the value at 0
-    // compute  sum_{i = 0} ^n (y_i * sum... )
-    let mut interpolated_value = Fr::zero();
-    for i in 0..n {
-        interpolated_value += points[i].1 * lagrange_at_zero[i];
-    }
+//     // Interpolate the value at 0
+//     // compute  sum_{i = 0} ^n (y_i * sum... )
+//     let mut interpolated_value = Fr::zero();
+//     for i in 0..n {
+//         interpolated_value += points[i].1 * lagrange_at_zero[i];
+//     }
 
-    interpolated_value
-}
+//     interpolated_value
+// }
 
 #[cfg(test)]
 mod test {
@@ -180,7 +178,7 @@ mod test {
         let rng = ChaCha20Rng::from_seed([2;32]);
         match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match decrypt(aes_out.ciphertext, &aes_out.nonce, &aes_out.key) {
+                match decrypt(aes_out) {
                     Ok(plaintext) => {
                         assert_eq!(msg.to_vec(), plaintext);
                     }, 
@@ -201,7 +199,12 @@ mod test {
         let rng = ChaCha20Rng::from_seed([1;32]);
         match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match decrypt(aes_out.ciphertext, &aes_out.nonce, &b"hi".to_vec()) {
+                let bad = AESOutput {
+                    ciphertext: aes_out.ciphertext,
+                    nonce: aes_out.nonce, 
+                    key: b"hi".to_vec(),
+                };
+                match decrypt(bad) {
                     Ok(_) => {
                         panic!("should be an error");
                     }, 
@@ -222,7 +225,12 @@ mod test {
         let rng = ChaCha20Rng::from_seed([3;32]);
         match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match decrypt(aes_out.ciphertext, &vec![0,0,0,0,0,0,0,0,0,0,0,0], &aes_out.key) {
+                let bad = AESOutput {
+                    ciphertext: aes_out.ciphertext,
+                    nonce: vec![0,0,0,0,0,0,0,0,0,0,0,0], 
+                    key: aes_out.key,
+                };
+                match decrypt(bad) {
                     Ok(_) => {
                         panic!("should be an error");
                     }, 
@@ -237,15 +245,15 @@ mod test {
         }
     }
 
-    #[test]
-    fn secrets_interpolation() {
-        let n = 10; // Number of participants
-        let t = 7; // Threshold
-        let rng = ChaCha20Rng::from_seed([4;32]);
-        let (msk, shares) = generate_secrets(n, t, rng);
-        // Perform Lagrange interpolation
-        let interpolated_msk = interpolate(shares);
-        // Check if the msk and the interpolated msk match
-        assert_eq!(msk, interpolated_msk);
-    }
+    // #[test]
+    // fn secrets_interpolation() {
+    //     let n = 10; // Number of participants
+    //     let t = 7; // Threshold
+    //     let rng = ChaCha20Rng::from_seed([4;32]);
+    //     let (msk, shares) = generate_secrets(n, t, rng);
+    //     // Perform Lagrange interpolation
+    //     let interpolated_msk = interpolate(shares);
+    //     // Check if the msk and the interpolated msk match
+    //     assert_eq!(msk, interpolated_msk);
+    // }
 }

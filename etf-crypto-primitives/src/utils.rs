@@ -12,6 +12,11 @@ use serde::{Serialize, Deserialize};
 // use core::borrow::Borrow;
 use alloc::borrow::ToOwned;
 
+use ark_ec::{Group, pairing::Pairing};
+
+use w3f_bls::{EngineBLS, PublicKey, SecretKey, Message};
+
+
 #[cfg(feature = "std")]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KeypairWrapper {
@@ -93,6 +98,19 @@ pub fn h3(a: & [u8], b: &[u8]) -> Fr {
     input.extend_from_slice(b);
     let hash = sha256(&input);
     Fr::from_be_bytes_mod_order(&hash)
+}
+
+
+// Should add a const to the signature so I can enforce sized inputs?
+// right now this works with any size slices
+/// H_3: {0,1}^n x {0, 1}^m -> Z_p
+pub fn h3_new<E: EngineBLS>(a: & [u8], b: &[u8]) 
+    -> E::Scalar {
+    let mut input = Vec::new();
+    input.extend_from_slice(a);
+    input.extend_from_slice(b);
+    let hash = sha256(&input);
+    E::Scalar::from_be_bytes_mod_order(&hash)
 }
 
 /// H_4: {0, 1}^n -> {0, 1}^n
