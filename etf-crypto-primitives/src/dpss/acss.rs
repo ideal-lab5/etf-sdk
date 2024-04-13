@@ -34,7 +34,7 @@ use crate::{
     proofs::hashed_el_gamal_sigma::BatchPoK,
 };
 
-use w3f_bls::{EngineBLS, SecretKeyVT};
+use w3f_bls::{EngineBLS, KeypairVT, SecretKeyVT};
 
 pub type PublicKey<G> = G;
 
@@ -49,13 +49,13 @@ pub enum ACSSError {
     InvalidProof,
 }
 
-pub struct SKWrapper<E: EngineBLS>(pub SecretKeyVT<E>);
+pub struct SKWrapper<E: EngineBLS>(pub KeypairVT<E>);
 
 impl<E: EngineBLS> SKWrapper<E> {
     pub fn recover(&self, pok: BatchPoK<E::SignatureGroup>) -> Option<E::Scalar> {
         // SecretVT -> To Scalar
-        let secret = self.0.0.clone();
-        // TODO: omitting blinding secret for now
+        let secret = self.0.secret.0.clone();
+        // TODO: omitting blinding secret for now...
         if let Some((s, _)) = HighThresholdACSS::recover(
             secret, vec![pok],
         ).ok() {
