@@ -2,7 +2,7 @@
 use crate::{
     encryption::{aes, aes::AESOutput},
     ibe::fullident::{Identity, IBECiphertext, IBESecret},
-    utils::{convert_to_bytes, hash_to_g1},
+    utils::convert_to_bytes,
 };
 
 use ark_ff::{UniformRand, Field, One, Zero};
@@ -12,22 +12,15 @@ use ark_poly::{
     univariate::DensePolynomial
 };
 
-use ark_bls12_381::{G1Affine as G1, G2Affine as G2, Fr};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::CanonicalDeserialize;
 use serde::{Deserialize, Serialize};
 
 use ark_std::{
-    marker::PhantomData,
     vec::Vec,
     rand::{CryptoRng, Rng},
 };
 
-use w3f_bls::{
-    EngineBLS, 
-    PublicKey, 
-    SecretKey, 
-    Message,
-};
+use w3f_bls::EngineBLS;
 
 /// a secret key used for encryption/decryption
 pub type OpaqueSecretKey = Vec<u8>;

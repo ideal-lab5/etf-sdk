@@ -24,12 +24,3 @@ pub mod ser;
 
 // #[cfg(test)]
 pub mod testing;
-
-#[cfg(feature = "std")]
-pub use kzen_paillier::EncryptionKey as PaillierEncryptionKey;
-#[cfg(feature = "std")]
-pub use kzen_paillier::DecryptionKey as PaillierDecryptionKey;
-#[cfg(feature = "std")]
-pub use kzen_paillier::MinimalDecryptionKey as MinimalDecryptionKey;
-#[cfg(feature = "std")]
-pub use kzen_paillier::BigInt as BigInt;

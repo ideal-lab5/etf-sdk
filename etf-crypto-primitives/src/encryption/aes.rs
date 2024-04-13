@@ -1,14 +1,9 @@
 use aes_gcm::{
     aead::{Aead, AeadCore, AeadInPlace, KeyInit},
-    Aes256Gcm, Nonce, // Or `Aes128Gcm`
+    Aes256Gcm, Nonce,
 };
 use ark_std::rand::Rng;
-use ark_bls12_381::Fr;
-use ark_ff::{Zero, One, Field, UniformRand};
-use ark_poly::{
-    polynomial::univariate::DensePolynomial,
-    DenseUVPolynomial, Polynomial,
-};
+
 use serde::{Deserialize, Serialize};
 // use alloc::vec::Vec;
 

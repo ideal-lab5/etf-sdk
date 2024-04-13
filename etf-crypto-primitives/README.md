@@ -10,7 +10,6 @@ The repo is organized as:
 - Proofs
     - DLEQ proofs
     - El Gamal Sigma Protocol
-    - Paillier Sigma Protocols
 - DPSS: The dynamic committee proactive secret sharing implementation
 - Client: Timelock Encryption Implementation
 

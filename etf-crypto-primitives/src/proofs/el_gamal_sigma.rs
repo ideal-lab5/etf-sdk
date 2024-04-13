@@ -15,17 +15,14 @@
  * limitations under the License.
  */
 
-
-#![no_std]
 use ark_ec::CurveGroup;
 use ark_ff::{fields::PrimeField, UniformRand, Zero};
 use ark_serialize::{CanonicalSerialize, SerializationError};
-use ark_std::{marker::PhantomData, rand::Rng, vec::Vec};
+use ark_std::{rand::Rng, vec::Vec};
 use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
     Shake128,
 };
-use serde::{Deserialize, Serialize};
 use crate::types::ProtocolParams as Params;
 
 // a public commitment for a point in the curbe group's scalar field

@@ -15,39 +15,26 @@
  * limitations under the License.
  */
 
-use ark_bls12_381::{Fr, G1Projective as G};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_ff::{BigInteger, PrimeField, UniformRand};
+use ark_serialize::CanonicalDeserialize;
+use ark_ff::UniformRand;
 use ark_poly::{
     polynomial::univariate::DensePolynomial,
     DenseUVPolynomial, Polynomial,
 };
-use ark_ec::{CurveGroup, Group};
+use ark_ec::CurveGroup;
 use ark_std::{
     marker::PhantomData,
-    cmp::Ordering,
-    ops::Mul,
     vec::Vec, 
-    rand::{CryptoRng, Rng, SeedableRng},
+    rand::{CryptoRng, Rng},
     collections::BTreeMap,
 };
-use scale_info::TypeInfo;
-use alloc::boxed::Box;
 
-use serde_json::from_slice;
-use serde::{Deserialize, Serialize};
-
-use codec::{Encode, Decode};
-use chacha20poly1305::{
-    aead::{Aead, AeadCore, KeyInit},
-    XChaCha20Poly1305, XNonce
-};
 use crate::{
     encryption::hashed_el_gamal::HashedElGamal,
     proofs::hashed_el_gamal_sigma::BatchPoK,
-    types::ProtocolParams as ACSSParams,
-    utils::convert_to_bytes,
 };
+
+use w3f_bls::{EngineBLS, SecretKeyVT};
 
 pub type PublicKey<G> = G;
 
@@ -62,6 +49,23 @@ pub enum ACSSError {
     InvalidProof,
 }
 
+pub struct SKWrapper<E: EngineBLS>(pub SecretKeyVT<E>);
+
+impl<E: EngineBLS> SKWrapper<E> {
+    pub fn recover(&self, pok: BatchPoK<E::SignatureGroup>) -> Option<E::Scalar> {
+        // SecretVT -> To Scalar
+        let secret = self.0.0.clone();
+        // TODO: omitting blinding secret for now
+        if let Some((s, _)) = HighThresholdACSS::recover(
+            secret, vec![pok],
+        ).ok() {
+            // let recovered_secret = SecretKeyVT(s);
+            // return Some(KeypairVT { secret: recovered_secret, public });
+            return Some(s);
+        }
+        None
+    }
+}
 /// the high threshold asynchronous complete secret sharing struct
 pub struct HighThresholdACSS<G: CurveGroup> {
     _curve_group: PhantomData<G>,

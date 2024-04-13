@@ -5,43 +5,10 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_bls12_381::{Fr, G1Affine};
 use ark_std::vec::Vec;
-#[cfg(feature = "std")]
-use kzen_paillier::{DecryptionKey, EncryptionKey, KeyGeneration, Keypair, Paillier};
-use serde::{Serialize, Deserialize};
 
-// use core::borrow::Borrow;
 use alloc::borrow::ToOwned;
 
-use ark_ec::{Group, pairing::Pairing};
-
-use w3f_bls::{EngineBLS, PublicKey, SecretKey, Message};
-
-
-#[cfg(feature = "std")]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct KeypairWrapper {
-    pub ek: EncryptionKey,
-    pub dk: DecryptionKey,
-}
-
-#[cfg(feature = "std")]
-/// create a new keypair for the paillier cryptosystem
-pub fn paillier_create_keypair() -> Result<Vec<u8>, serde_json::Error> {
-    let bytes = serde_json::to_vec(&Paillier::keypair())?;
-    Ok(bytes)
-}
-
-#[cfg(feature = "std")]
-/// create a new (ek, dk) from a keypair
-pub fn paillier_create_keys(keypair_bytes: Vec<u8>) -> Result<Vec<u8>, serde_json::Error> {
-    let kp: Keypair = serde_json::from_slice(&keypair_bytes)?;
-    let keys = kp.keys();
-    let output = serde_json::to_vec(&KeypairWrapper {
-        ek: keys.0,
-        dk: keys.1,
-    })?;
-    Ok(output)
-}
+use w3f_bls::EngineBLS;
 
 /// sha256 hasher
 pub fn sha256(b: &[u8]) -> Vec<u8> {
@@ -186,16 +153,5 @@ mod test {
         let actual = crate::utils::sha256(b"test");
         let expected = vec![159, 134, 208, 129, 136, 76, 125, 101, 154, 47, 234, 160, 197, 90, 208, 21, 163, 191, 79, 27, 43, 11, 130, 44, 209, 93, 108, 21, 176, 240, 10, 8];
         assert_eq!(actual, expected);
-    }
-}
-
-// cargo test --features paillier
-#[cfg(test)]
-
-mod pailler_test {
-    #[test]
-    fn paillier_can_create_and_inspect_keys() {
-        let kp = crate::utils::paillier_create_keypair().unwrap();
-        let ek = crate::utils::paillier_create_keys(kp).ok();
     }
 }

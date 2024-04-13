@@ -1,28 +1,14 @@
-// use ark_bls12_381::{
-//     Bls12_381, 
-//     G1Projective as G1, 
-//     G2Projective as G2, 
-// };
-
-use ark_ff::fields::CyclotomicMultSubgroup;
 use ark_ff::UniformRand;
-use ark_ec::pairing::PairingOutput;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_ec::{Group, pairing::Pairing};
+use ark_ec::Group;
 use ark_std::{
     ops::Mul,
     rand::Rng,
-    borrow::ToOwned,
 };
 use ark_std::vec::Vec;
-use crate::utils::{h2, h3, h3_new, h4, cross_product_32};
+use crate::utils::{h2, h3_new, h4, cross_product_32};
 
-use w3f_bls::{
-    EngineBLS, 
-    PublicKey, 
-    SecretKey, 
-    Message,
-};
+use w3f_bls::{EngineBLS, Message};
 
 // keep in mind SignautreGroup = G2, pubkeygroup = G1
 
