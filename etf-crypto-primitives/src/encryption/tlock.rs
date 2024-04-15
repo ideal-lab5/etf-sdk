@@ -59,7 +59,7 @@ pub struct Tlock<E: EngineBLS> {
 }
 
 impl<E: EngineBLS> Tlock<E> {
-    fn encrypt<R: Rng + CryptoRng + Sized>(
+    pub fn encrypt<R: Rng + CryptoRng + Sized>(
         p_pub: E::PublicKeyGroup,
         message: &[u8],
         ids: Vec<Identity>,
@@ -86,7 +86,7 @@ impl<E: EngineBLS> Tlock<E> {
 
     /// the order of the ibe_secrets should match the order 
     /// in which the ciphertexts were created
-    fn decrypt(
+    pub fn decrypt(
         // ibe_pp: Vec<u8>,
         ciphertext: TLECiphertext<E>,
         ibe_secrets: Vec<IBESecret<E>>,

@@ -56,11 +56,9 @@ impl<E: EngineBLS> SKWrapper<E> {
         // SecretVT -> To Scalar
         let secret = self.0.secret.0.clone();
         // TODO: omitting blinding secret for now...
-        if let Some((s, _)) = HighThresholdACSS::recover(
+        if let Some((s, _s_prime)) = HighThresholdACSS::recover(
             secret, vec![pok],
         ).ok() {
-            // let recovered_secret = SecretKeyVT(s);
-            // return Some(KeypairVT { secret: recovered_secret, public });
             return Some(s);
         }
         None
@@ -92,7 +90,6 @@ impl<G: CurveGroup> HighThresholdACSS<G> {
         // f(x) -> [f(0), {(1, f(1)), ..., (n, f(n))}]
         let evals: BTreeMap<G::ScalarField, G::ScalarField> = generate_shares_checked::<G, R>(
             msk, next_committee.len() as u8, t, &mut rng);
-        // panic!("{:?}", evals);
         // f_hat(x) (blinding polynomial) -> [f'(0), {(1, f'(1)), ...(n, f'(n))}]
         let evals_hat: BTreeMap<G::ScalarField, G::ScalarField> = generate_shares_checked::<G, R>(
             msk_hat, next_committee.len() as u8, t, &mut rng);

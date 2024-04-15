@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-
-// #![no_std]
 use ark_ec::CurveGroup;
 use ark_ff::{fields::PrimeField, UniformRand, Zero};
 use ark_serialize::{CanonicalSerialize, CanonicalDeserialize};
