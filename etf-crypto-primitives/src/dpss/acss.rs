@@ -34,7 +34,7 @@ use crate::{
     proofs::hashed_el_gamal_sigma::BatchPoK,
 };
 
-use w3f_bls::{EngineBLS, KeypairVT, SecretKeyVT};
+use w3f_bls::{EngineBLS, KeypairVT};
 
 pub type PublicKey<G> = G;
 
@@ -134,8 +134,6 @@ impl<G: CurveGroup> HighThresholdACSS<G> {
                 return Err(ACSSError::InvalidProof);
             }
 
-            // TODO: this should just loop over the ciphertexts
-            // very unsafe code, but fine for testing...
             let s_bytes = HashedElGamal::decrypt(sk, pok.ciphertexts[0].clone());
 
             let s = G::ScalarField::deserialize_compressed(&s_bytes[..]).unwrap();
@@ -151,7 +149,6 @@ impl<G: CurveGroup> HighThresholdACSS<G> {
             // we can continue as long as a threshold of proofs are valid...
             if !pok.verify(q) {
                 invalid_poks.push(pok);
-                // return Err(ACSSError::InvalidProof);
             }
 
             let f = G::ScalarField::from(idx as u8 + 1);
@@ -201,8 +198,10 @@ pub mod tests {
     use super::*;
     use ark_std::vec::Vec;
     use ark_ec::Group;
-    use ark_std::{test_rng, rand::SeedableRng};
+    use ark_std::{test_rng, rand::SeedableRng, ops::Mul};
+    use ark_serialize::CanonicalSerialize;
 
+    use ark_bls12_377::{Fr, G1Projective as G};
     use rand_chacha::ChaCha20Rng;
     use ark_poly::{
         polynomial::univariate::DensePolynomial,

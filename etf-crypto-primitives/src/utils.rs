@@ -26,12 +26,12 @@ pub fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
     o.to_vec()
 }
 
-pub fn cross_product<const N: usize>(a: &[u8;N], b: &[u8;N]) -> Vec<u8> {
+pub fn cross_product<const N: usize>(a: &[u8;N], b: &[u8;N]) -> [u8;N] {
     let mut o = a.to_owned();
     for (i, ri) in o.iter_mut().enumerate().take(N) {
         *ri ^= b[i];
     }
-    o.to_vec()
+    o
 }
 
 /// {0, 1}^* -> G1
@@ -48,7 +48,7 @@ pub fn hash_to_g1(b: &[u8]) -> G1Affine {
     }
 }
 
-// TODO: change to expect Pairing output?
+/// a map from G -> {0, 1}^{32}
 pub fn h2<G: CanonicalSerialize>(g: G) -> Vec<u8> {
     // let mut out = Vec::with_capacity(g.compressed_size());
     let mut out = Vec::new();
@@ -103,20 +103,18 @@ pub fn convert_to_bytes<E: CanonicalSerialize, const N: usize>(k: E) -> [u8;N] {
 	o
 }
 
-
-/// TODO: move this to a common place
 /// interpolate a polynomial from the input and evaluate it at 0
 /// P(X) = sum_{i = 0} ^n y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj))
 ///
 /// * `evalulation`: a vec of (x, f(x)) pairs
 ///
-pub fn interpolate<C: CurveGroup>(points: Vec<(C::ScalarField, C::ScalarField)>) -> C::ScalarField {
+pub fn interpolate<C: CurveGroup>(
+    points: Vec<(C::ScalarField, C::ScalarField)>
+) -> C::ScalarField {
     let n = points.len();
-
     // Calculate the Lagrange basis polynomials evaluated at 0
     let mut lagrange_at_zero: Vec<C::ScalarField> = Vec::with_capacity(n);
     for i in 0..n {
-
         // build \prod_{j=0}^n [j != i] (x-xj/xi - xj)
         let mut basis_value = C::ScalarField::one();
         for j in 0..n {

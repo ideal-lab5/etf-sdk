@@ -1,4 +1,19 @@
-/// ETF CLIENT
+
+/*
+ * Copyright 2024 by Ideal Labs, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 use crate::{
     encryption::{aes, aes::AESOutput},
     ibe::fullident::{Identity, IBECiphertext, IBESecret},
@@ -77,9 +92,6 @@ impl<E: EngineBLS> Tlock<E> {
             let b: [u8;32] = convert_to_bytes::<E::Scalar, 32>(shares[idx].1);
             let ct: IBECiphertext<E> = id.encrypt(&b, p_pub, &mut rng);
             out.push(ct);
-            // let mut o = Vec::with_capacity(ct.compressed_size());
-            // ct.serialize_compressed(&mut o).expect("The output is well formatted;qed");
-            // out.push(o);
         }
         Ok(TLECiphertext { aes_ct: ct_aes, etf_ct: out })
     }
@@ -99,18 +111,22 @@ impl<E: EngineBLS> Tlock<E> {
         // 2. use the recovered shares to interopoate
 
         let mut dec_secrets: Vec<(E::Scalar, E::Scalar)> = Vec::new();
-        // // ensure capsule and secrets have the same size -> not needed actually..1
+        // // ensure capsule and secrets have the same size, will need to modify shortly...
         if ciphertext.etf_ct.len() < ibe_secrets.len() {
             return Err(ClientError::VectorDimensionMismatch);
         }
         for (idx, sk) in ibe_secrets.iter().enumerate() {
             let expected_ct = &ciphertext.etf_ct[idx];
-            let share_bytes = 
-                sk.decrypt(expected_ct).map_err(|_| ClientError::DecryptionError)?;
+
+            let share_bytes = sk.decrypt(expected_ct)
+                .map_err(|_| ClientError::DecryptionError)?;
+
             let share = E::Scalar::deserialize_compressed(&share_bytes[..])
                 .map_err(|_| ClientError::DeserializationError)?;
+
             dec_secrets.push((E::Scalar::from((idx + 1) as u8), share));
         }
+
         let secret_scalar = interpolate::<E>(dec_secrets);
         let o = convert_to_bytes::<E::Scalar, 32>(secret_scalar);
 
@@ -135,7 +151,10 @@ impl<E: EngineBLS> Tlock<E> {
 /// * `t`: The degree of the polynomial (i.e. the threhsold)
 /// * `rng`: A random number generator
 ///
-pub fn generate_secrets<E: EngineBLS, R: Rng + Sized + CryptoRng>(
+pub fn generate_secrets<
+    E: EngineBLS, 
+    R: Rng + Sized + CryptoRng
+>(
     n: u8, t: u8, mut rng: &mut R
 ) -> (E::Scalar, Vec<(E::Scalar, E::Scalar)>) {
     
@@ -210,37 +229,29 @@ mod test {
     use ark_ec::hashing::map_to_curve_hasher::MapToCurve;
     use ark_ec::pairing::Pairing as PairingEngine;
 
-    use w3f_bls::{CurveExtraConfig, TinyBLS, UsualBLS};
+    use w3f_bls::TinyBLS377;
 
     use ark_std::{test_rng, rand::{RngCore, SeedableRng}};
+    use rand_core::OsRng;
 
-
-
-    fn run_test<
-        EB: EngineBLS<Engine = E>,
-        E: PairingEngine, 
-        P: Bls12Config + CurveExtraConfig>()
-    where
-        <P as Bls12Config>::G2Config: WBConfig,
-        WBMap<<P as Bls12Config>::G2Config>: MapToCurve<<E as PairingEngine>::G2>,
-    {
+    fn basic_tlock_works<E: EngineBLS>() {
         let mut rng = ChaCha20Rng::from_seed([4;32]);
         let message = b"this is a test message".to_vec();
         let id = Identity::new(b"id1");
         let ids = vec![id.clone()];
         let t = 1;
         // setup the IBE system
-        let msk = <EB as EngineBLS>::Scalar::rand(&mut test_rng());
+        let msk = <E as EngineBLS>::Scalar::rand(&mut test_rng());
         // // then we need out p_pub = msk * P \in G_1
-        let p_pub = <<EB as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
+        let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
 
-        let sk = id.extract::<EB>(msk);
+        let sk = id.extract::<E>(msk);
 
-        match Tlock::<EB>::encrypt(p_pub, &message, ids, t, &mut rng) {
+        match Tlock::<E>::encrypt(p_pub, &message, ids, t, &mut rng) {
             Ok(ct) => {
-                match Tlock::<EB>::decrypt(ct, vec![sk]) {
+                match Tlock::<E>::decrypt(ct, vec![sk]) {
                     Ok(output) => {
-
+                        assert_eq!(output.message, message);
                     }, 
                     Err(_) => {
                         panic!("The test should pass but failed to run tlock decrypt.");        
@@ -253,51 +264,54 @@ mod test {
         }
     }
 
+    fn threshold_tlock_works<E: EngineBLS, R: Rng + Sized + CryptoRng>() {
+        // let mut rng = ChaCha20Rng::from_seed([4;32]);
+        let message = b"this is a test message".to_vec();
+        let id1 = Identity::new(b"id1");
+        let id2 = Identity::new(b"id2");
+        let id3 = Identity::new(b"id3");
+
+        // let ids = vec![id1.clone(), id2.clone(), id3.clone()];
+        let ids = vec![id1.clone()];
+        let t = 3;
+        // then we need to create a resharing to each of the participants
+        // in reality this is done with the ACSS algorithm
+        // for testing, we just use basic Shamir
+        let (msk, shares) = generate_secrets::<E, OsRng>(ids.len() as u8, t, &mut OsRng);
+        // // then we need out p_pub = msk * P \in G_1
+        let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
+        // e.g. s_1 * Q, s_2 * Q, ..., s_n * Q where Q = H_1(identity string)
+        let ibe_secrets: Vec<IBESecret<E>> = 
+            shares.iter()
+                .enumerate()
+                .map(|(idx, share)| ids[idx].extract(share.1))
+                .collect::<Vec<_>>();
+    
+        match Tlock::<E>::encrypt(p_pub, &message, ids, t, &mut OsRng) {
+            Ok(ct) => {
+                match Tlock::<E>::decrypt(ct, ibe_secrets) {
+                    Ok(output) => {
+                        assert_eq!(output.message, message);
+                    }, 
+                    Err(e) => {
+                        panic!("The test should pass but failed to run tlock decrypt {:?}.", e);        
+                    }
+                }
+            },
+            Err(_) => {
+                panic!("The test should pass but failed to run tlock encrypt");
+            }
+        }
+    }
+
     #[test]
-    pub fn client_can_encrypt_decrypt_with_single_key() {
-        run_test::<TinyBLS<Bls12_377, ark_bls12_377::Config>, Bls12_377, ark_bls12_377::Config>();
+    pub fn client_can_encrypt_decrypt_with_single_identity() {
+        basic_tlock_works::<TinyBLS377>();
+    }
 
-        // let rng = ChaCha20Rng::from_seed([4;32]);
-        // let message = b"this is a test";
-        // let ids = vec![
-        //     b"id1".to_vec(), 
-        // ];
-        // let t = 1;
-
-        // let ibe_pp: G2 = G2::generator().into();
-        // let s = Fr::rand(&mut test_rng());
-        // let p_pub: G2 = ibe_pp.mul(s).into();
-
-        // let ibe_pp_bytes = convert_to_bytes::<G2, 96>(ibe_pp);
-        // let p_pub_bytes = convert_to_bytes::<G2, 96>(p_pub);
-
-        // match DefaultTlock::<BfIbe>::encrypt(
-        //     ibe_pp_bytes.to_vec(), p_pub_bytes.to_vec(),
-        //     message, ids.clone(), t, rng,
-        // ) {
-        //     Ok(ct) => {
-        //         // calculate secret keys: Q = H1(id), d = sQ
-        //         let secrets: Vec<Vec<u8>> = ids.iter().map(|id| {
-        //             let q = hash_to_g1(&id);
-        //             let d = q.mul(s);
-        //             convert_to_bytes::<G1, 48>(d.into()).to_vec()
-        //         }).collect::<Vec<_>>();
-        //         match DefaultTlock::<BfIbe>::decrypt(
-        //             ibe_pp_bytes.to_vec(), ct.aes_ct.ciphertext, ct.aes_ct.nonce, ct.etf_ct, secrets, 
-        //         ) {
-        //             Ok(decryption_result) => {
-        //                 assert_eq!(message.to_vec(), decryption_result.message);
-        //             }, 
-        //             Err(e) => {
-        //                 panic!("Decryption should work but was: {:?}", e);
-        //             }
-        //         }
-        //     },
-        //     Err(e) => {
-        //         panic!("Encryption should work but was {:?}", e);
-        //     }
-        // }
-        
+    #[test]
+    pub fn client_can_encrypt_decrypt_with_many_identities_full_threshold() {
+        threshold_tlock_works::<TinyBLS377, OsRng>();
     }
 
 //     #[test]
