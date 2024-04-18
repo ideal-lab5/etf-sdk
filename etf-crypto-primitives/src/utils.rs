@@ -52,6 +52,8 @@ pub fn hash_to_g1(b: &[u8]) -> G1Affine {
 pub fn h2<G: CanonicalSerialize>(g: G) -> Vec<u8> {
     // let mut out = Vec::with_capacity(g.compressed_size());
     let mut out = Vec::new();
+    // TODO: handle error => return empty
+    // else return [u8;32] 
     g.serialize_compressed(&mut out).unwrap();
     sha256(&out)
 }

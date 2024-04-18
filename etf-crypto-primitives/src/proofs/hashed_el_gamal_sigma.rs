@@ -29,9 +29,10 @@ use crate::{
     ser::{ark_de, ark_se},
 };
 
-// a public commitment for a point in the curbe group's scalar field
+// a public commitment for a point in the curve group's scalar field
 pub type Commitment<C> = C;
 
+/// Error types for the protocol
 #[derive(Debug)]
 pub enum Error {
     SerializationError,
@@ -91,8 +92,17 @@ impl<C: CurveGroup> PoK<C> {
         mut rng: R,
     ) -> Self {
         let mut message_bytes = Vec::new();
-        message.serialize_compressed(&mut message_bytes).unwrap();
-        let ciphertext = HashedElGamal::encrypt(message_bytes.try_into().unwrap(), params.h, params.g, &mut rng);
+        message.serialize_compressed(&mut message_bytes)
+            .expect("The message must be a scalar field element;qed");
+        let ciphertext = HashedElGamal::encrypt(
+            message_bytes
+                .try_into()
+                .expect("The message byte length should be correct"), 
+                params.h, 
+                params.g, 
+                &mut rng
+            ).unwrap();
+            // TODO handle errors properly
         let commitment: Commitment<C> = params.g * message + params.h * message;
 
         let k = C::ScalarField::rand(&mut rng);
@@ -111,7 +121,9 @@ impl<C: CurveGroup> PoK<C> {
         inputs.push(s_bytes);
         inputs.push(t_bytes);
         let mut c1_bytes = Vec::new();
-        ciphertext.c1.serialize_compressed(&mut c1_bytes).unwrap();
+        ciphertext.c1
+            .serialize_compressed(&mut c1_bytes)
+            .unwrap();
         inputs.push(c1_bytes);
         inputs.push(ciphertext.c2.to_vec());
 
@@ -132,20 +144,17 @@ impl<C: CurveGroup> PoK<C> {
     ) -> bool {
         let mut s_bytes = Vec::new();
         let mut t_bytes = Vec::new();
-        self
-            .s
-            .serialize_compressed(&mut s_bytes)
-            .expect("group element should exist");
-        self
-            .t
-            .serialize_compressed(&mut t_bytes)
-            .expect("group element should exist");
+        self.s.serialize_compressed(&mut s_bytes)
+            .expect("group elements are serializable");
+        self.t.serialize_compressed(&mut t_bytes)
+            .expect("group elements are serializable");
 
         let mut inputs = Vec::new();
         inputs.push(s_bytes);
         inputs.push(t_bytes);
         let mut c1_bytes = Vec::new();
-        self.ciphertext.c1.serialize_compressed(&mut c1_bytes).unwrap();
+        self.ciphertext.c1.serialize_compressed(&mut c1_bytes)
+            .expect("the group element must be serializable");
         inputs.push(c1_bytes);
         inputs.push(self.ciphertext.c2.to_vec());
 
@@ -177,13 +186,20 @@ impl<C: CurveGroup> BatchPoK<C> {
     ) -> BatchPoK<C> {
         let g = C::generator();
         
-        let aggregated_messages = (0..messages.len()).fold(C::ScalarField::zero(), |acc, val| acc + messages[val]);
+        let aggregated_messages = (0..messages.len())
+            .fold(C::ScalarField::zero(), |acc, val| acc + messages[val]);
 
         let batch_data: Vec<(Ciphertext<C>, Commitment<C>)> = messages.into_iter().map(|m| {
             let mut message_bytes = Vec::new();
-            m.serialize_compressed(&mut message_bytes).unwrap();
+            m.serialize_compressed(&mut message_bytes).expect("The messager should be serializable");
             // TODO: error handling
-            let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(message_bytes.try_into().unwrap(), pk, g, &mut rng);
+            let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(
+                message_bytes
+                    .try_into()
+                    .expect("The message was a scalar field element and so has the right size"), 
+                pk, 
+                g, 
+                &mut rng).unwrap(); // TODO: ERROR HANDLING
             let commitment: Commitment<C> = g * m + pk * m;
             (ciphertext, commitment)
         }).collect::<Vec<_>>();
@@ -198,7 +214,7 @@ impl<C: CurveGroup> BatchPoK<C> {
 
         let batch_commitment = batch_data.iter().map(|c| c.1).fold(C::zero(), |acc, val| acc + val);
 
-        let k = C::ScalarField::rand(&mut rng);
+        let k = C::ScalarField::rand(&mut rng); 
         let s = g * k;
         let t = pk * k;
 
@@ -214,7 +230,7 @@ impl<C: CurveGroup> BatchPoK<C> {
         inputs.push(s_bytes);
         inputs.push(t_bytes);
         let mut c1_bytes = Vec::new();
-        batch_ciphertext.c1.serialize_compressed(&mut c1_bytes).unwrap();
+        batch_ciphertext.c1.serialize_compressed(&mut c1_bytes).expect("group elements are serializable");
         inputs.push(c1_bytes);
         inputs.push(batch_ciphertext.c2.to_vec());
 
@@ -259,7 +275,7 @@ impl<C: CurveGroup> BatchPoK<C> {
         inputs.push(s_bytes);
         inputs.push(t_bytes);
         let mut c1_bytes = Vec::new();
-        ciphertext.c1.serialize_compressed(&mut c1_bytes).unwrap();
+        ciphertext.c1.serialize_compressed(&mut c1_bytes).expect("group elements should be serializable");
         inputs.push(c1_bytes);
         inputs.push(ciphertext.c2.to_vec());
 
@@ -314,7 +330,7 @@ mod test {
         assert_eq!(result, true);
 
         // and we can decrypt the ciphertext
-        let recovered = HashedElGamal::decrypt(x, proof.ciphertext);
+        let recovered = HashedElGamal::decrypt(x, proof.ciphertext).unwrap();
 
         let mut message_bytes = Vec::new();
         message.serialize_compressed(&mut message_bytes).unwrap();
@@ -344,9 +360,9 @@ mod test {
         assert_eq!(result, true);
 
         assert_eq!(2, proof.ciphertexts.clone().len());
-        let n1 = HashedElGamal::decrypt(x, proof.ciphertexts[0].clone());
+        let n1 = HashedElGamal::decrypt(x, proof.ciphertexts[0].clone()).unwrap();
         assert_eq!(m1_bytes, n1);
-        let n2 = HashedElGamal::decrypt(x, proof.ciphertexts[1].clone());
+        let n2 = HashedElGamal::decrypt(x, proof.ciphertexts[1].clone()).unwrap();
         assert_eq!(m2_bytes, n2);
     }
 

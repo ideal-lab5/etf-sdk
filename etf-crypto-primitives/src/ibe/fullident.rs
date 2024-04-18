@@ -79,7 +79,8 @@ impl Identity {
     where E: EngineBLS, R: Rng + Sized {
         let t = E::Scalar::rand(&mut rng);
         let mut t_bytes = Vec::new();
-        t.serialize_compressed(&mut t_bytes).expect("field elements have 32 bytes; qed");
+        t.serialize_compressed(&mut t_bytes)
+            .expect("compressed size has been allocated");
         let sigma = h4(&t_bytes);
         // r= H3(sigma, message)
         let r: E::Scalar = h3_new::<E>(&sigma, message);

@@ -31,7 +31,7 @@ use core::marker::PhantomData;
 use serde::{Deserialize, Serialize};
 use crate::{
     ser::{ark_se, ark_de},
-    utils::cross_product_32
+    utils::cross_product,
 };
 
 /// the message type required for the hashed el gamal variant
@@ -53,12 +53,17 @@ impl<C: CurveGroup> Ciphertext<C> {
     pub fn add(self, ct: Ciphertext<C>) -> Self {
         Ciphertext {
             c1: self.c1 + ct.c1,
-            c2: cross_product_32(
+            c2: cross_product::<32>(
                 &self.c2, 
                 &ct.c2,
             ).try_into().unwrap(),
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    InvalidBufferSize,
 }
 
 /// the hashed el gamal encryption scheme
@@ -81,18 +86,19 @@ impl<C: CurveGroup> HashedElGamal<C> {
         pk: C, 
         generator: C,
         mut rng: R,
-    ) -> Ciphertext<C> {
+    ) -> Result<Ciphertext<C>, Error> {
         let r = C::ScalarField::rand(&mut rng);
         let c1 = generator.mul(r);
         let inner = pk.mul(r);
 
-        let c2: [u8;32] = crate::utils::cross_product::<32>(
-            &crate::utils::h2(inner).try_into().expect("the element should have 32 bytes"), 
+        let c2: [u8;32] = cross_product::<32>(
+            &crate::utils::h2(inner)
+                .try_into()
+                .map_err(|_| Error::InvalidBufferSize)?, //  but how can I test this? need to revist h2 impl
             &message
         );
 
-        Ciphertext{ c1, c2 }
-
+        Ok(Ciphertext{ c1, c2 })
     }
 
     /// decrypt a ciphertext using a secret key, recovered a scalar field element
@@ -100,14 +106,15 @@ impl<C: CurveGroup> HashedElGamal<C> {
     pub fn decrypt(
         sk: C::ScalarField, 
         ciphertext: Ciphertext<C>
-    ) -> Message {
+    ) -> Result<Message, Error> {
         // s = sk * c1
         let s = ciphertext.c1.mul(sk);
         // m = s (+) c2
-        crate::utils::cross_product::<32>(
-            &crate::utils::h2(s).try_into().expect("Sha256 hashes have 32 bytes;qed"), 
+        Ok(cross_product::<32>(
+            &crate::utils::h2(s).try_into()
+                .map_err(|_| Error::InvalidBufferSize)?,
             &ciphertext.c2,
-        )
+        ))
     }
 
 }
@@ -134,8 +141,15 @@ impl<C: CurveGroup> HashedElGamal<C> {
         let mut secret_bytes = Vec::new();
         secret.serialize_compressed(&mut secret_bytes).unwrap();
         
-        let ct = HashedElGamal::encrypt(secret_bytes.clone().try_into().unwrap(), pk, G1::generator(), &mut test_rng());
-        let recovered_bytes = HashedElGamal::decrypt(sk, ct);
+        let ct = HashedElGamal::encrypt(
+            secret_bytes
+                .clone()
+                .try_into()
+                .unwrap(), 
+            pk, 
+            G1::generator(), 
+            &mut test_rng()).unwrap();
+        let recovered_bytes = HashedElGamal::decrypt(sk, ct).unwrap();
         assert_eq!(recovered_bytes.to_vec(), secret_bytes);
     }
 
@@ -158,9 +172,11 @@ impl<C: CurveGroup> HashedElGamal<C> {
         combined.serialize_compressed(&mut combined_bytes).unwrap();
         
         let ct = HashedElGamal::encrypt(
-            secret_bytes.clone().try_into().unwrap(), pk, G1::generator(), &mut test_rng());
+            secret_bytes.clone().try_into().unwrap(), 
+            pk, G1::generator(), &mut test_rng()).unwrap();
         let other_ct = HashedElGamal::encrypt(
-            other_secret_bytes.clone().try_into().unwrap(), pk, G1::generator(), &mut test_rng());
+            other_secret_bytes.clone().try_into().unwrap(), 
+            pk, G1::generator(), &mut test_rng()).unwrap();
 
         let expected = Ciphertext {
             c1: ct.c1 + other_ct.c1,
@@ -187,8 +203,8 @@ impl<C: CurveGroup> HashedElGamal<C> {
             pk, 
             G1::generator(), 
             &mut test_rng()
-        );
-        let recovered_bytes = HashedElGamal::decrypt(bad_sk, ct);
+        ).unwrap();
+        let recovered_bytes = HashedElGamal::decrypt(bad_sk, ct).unwrap();
         assert!(recovered_bytes.to_vec() != secret_bytes);
     }
 }

@@ -103,18 +103,11 @@ impl<E: EngineBLS> Tlock<E> {
         ciphertext: TLECiphertext<E>,
         ibe_secrets: Vec<IBESecret<E>>,
     ) -> Result<DecryptionResult, ClientError> {
-
-        // 0. Verification: should we check the size of the secrets vec?
-
-        // 1. use the ibe secrets to recover the plaintext shares
-
-        // 2. use the recovered shares to interopoate
-
         let mut dec_secrets: Vec<(E::Scalar, E::Scalar)> = Vec::new();
         // // ensure capsule and secrets have the same size, will need to modify shortly...
-        if ciphertext.etf_ct.len() < ibe_secrets.len() {
-            return Err(ClientError::VectorDimensionMismatch);
-        }
+        // if ciphertext.etf_ct.len() < ibe_secrets.len() {
+        //     return Err(ClientError::VectorDimensionMismatch);
+        // }
         for (idx, sk) in ibe_secrets.iter().enumerate() {
             let expected_ct = &ciphertext.etf_ct[idx];
 
