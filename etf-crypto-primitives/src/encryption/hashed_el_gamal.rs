@@ -56,7 +56,8 @@ impl<C: CurveGroup> Ciphertext<C> {
             c2: cross_product::<32>(
                 &self.c2, 
                 &ct.c2,
-            ).try_into().unwrap(),
+            ).try_into()
+            .expect("The second parameter of a ciphertext must be 32 bytes"),
         }
     }
 }
@@ -191,7 +192,7 @@ impl<C: CurveGroup> HashedElGamal<C> {
     #[test]
     fn decryption_fails_with_bad_key() {
         let sk = Fr::rand(&mut test_rng());
-        let bad_sk = Fr::one();
+        let bad_sk = Fr::one() + sk;
         let pk = G1::generator().mul(sk);
 
         let secret = Fr::rand(&mut test_rng());
@@ -207,4 +208,31 @@ impl<C: CurveGroup> HashedElGamal<C> {
         let recovered_bytes = HashedElGamal::decrypt(bad_sk, ct).unwrap();
         assert!(recovered_bytes.to_vec() != secret_bytes);
     }
+
+    #[test]
+    fn decryption_fails_with_bad_ciphertext() {
+        let sk = Fr::rand(&mut test_rng());
+        let pk = G1::generator().mul(sk);
+
+        let secret = Fr::rand(&mut test_rng());
+        let mut secret_bytes = Vec::new();
+        secret.serialize_compressed(&mut secret_bytes).unwrap();
+        
+        let mut ct = HashedElGamal::encrypt(
+            secret_bytes.clone().try_into().unwrap(), 
+            pk, 
+            G1::generator(), 
+            &mut test_rng()
+        ).unwrap();
+        ct.c2 = [1;32];
+        match HashedElGamal::decrypt(sk, ct) {
+            Ok(recovered_bytes) => {
+                assert!(recovered_bytes.to_vec() != secret_bytes);
+            }
+            Err(_) => {
+                // assert_eq!(e, );
+            }
+        }
+    }
+
 }

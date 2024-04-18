@@ -150,7 +150,7 @@ mod test {
     // this enum represents the conditions or branches that I want to test
     enum TestStatusReport {
         DecryptionResult { data: Vec<u8>, verify: Vec<u8> },
-        DecryptionFailure{ error: IbeError },
+        DecryptionFailure{ error: IbeError }
     }
 
     fn run_test<EB: EngineBLS>(
@@ -216,9 +216,10 @@ mod test {
             identity, message, false, false,
             &|status: TestStatusReport| {
             match status {
-                TestStatusReport::DecryptionResult{ data, verify } => 
-                    assert_eq!(data, verify),
-                TestStatusReport::DecryptionFailure{ error: _error } => 
+                TestStatusReport::DecryptionResult{ data, verify } => {
+                    assert_eq!(data, verify);
+                },
+                _ => 
                     panic!("Decryption should work"),
             }
         });
@@ -237,10 +238,10 @@ mod test {
             true,
             &|status: TestStatusReport| {
             match status {
-                TestStatusReport::DecryptionResult{ data: _d, verify: _v } => 
-                    panic!("Decryption should fail"),
-                TestStatusReport::DecryptionFailure{ error } => 
-                    assert_eq!(error, IbeError::DecryptionFailed)
+                TestStatusReport::DecryptionFailure{ error } => {
+                    assert_eq!(error, IbeError::DecryptionFailed);
+                },
+                _ => panic!("all other conditions invalid"),
             }
         });
     }
@@ -255,10 +256,10 @@ mod test {
             identity, message, true, false,
             &|status: TestStatusReport| {
             match status {
-                TestStatusReport::DecryptionResult{ data: _d, verify: _v } => 
-                    panic!("Decryption should fail"),
-                TestStatusReport::DecryptionFailure{ error } => 
-                    assert_eq!(error, IbeError::DecryptionFailed)
+                TestStatusReport::DecryptionFailure{ error } => {
+                    assert_eq!(error, IbeError::DecryptionFailed);
+                },
+                _ => panic!("all other conditions invalid"),
             }
         });
     }

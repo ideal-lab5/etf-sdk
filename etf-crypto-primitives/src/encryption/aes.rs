@@ -5,7 +5,6 @@ use aes_gcm::{
 use ark_std::rand::Rng;
 
 use serde::{Deserialize, Serialize};
-// use alloc::vec::Vec;
 
 use ark_std::rand::CryptoRng;
 use ark_std::vec::Vec;

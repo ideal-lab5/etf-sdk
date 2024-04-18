@@ -36,25 +36,7 @@ pub type Commitment<C> = C;
 #[derive(Debug)]
 pub enum Error {
     SerializationError,
-}
-
-/// the NIZK PoK
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
-pub struct PoK<C: CurveGroup> {
-    /// the commitment to the random value (e.g. rG)
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub s: C,
-    /// the 'blinding' commitment to the random value (e.g. rH)
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub t: C,
-    /// the challenge (e.g. z = k + es)
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub z: C::ScalarField,
-    /// the commitment to the secret input
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub commitment: C,
-    /// the (hashed el gamal) ciphertext
-    pub ciphertext: Ciphertext<C>,
+    EncryptionFailed,
 }
 
 /// the NIZK PoK with support for batched ciphertexts
@@ -74,99 +56,6 @@ pub struct BatchPoK<C: CurveGroup> {
     pub commitment: C,
     /// the (hashed el gamal) ciphertexts
     pub ciphertexts: Vec<Ciphertext<C>>,
-}
-
-
-impl<C: CurveGroup> PoK<C> {
-
-    /// Prove that a commitment is of the preimage of a Hashed-El Gamal ciphertext
-    /// without revealing the message. Also produces valid Hashed El Gamal Ciphertexts
-    ///
-    /// * `s`: The scalar field element to prove knowledge of
-    /// * `params`: The parameters required to run the protocol (two group generators)
-    /// * `rng`: A CSPRNG
-    ///
-    pub fn prove<R: Rng + Sized>(
-        message: C::ScalarField,
-        params: Params<C>,
-        mut rng: R,
-    ) -> Self {
-        let mut message_bytes = Vec::new();
-        message.serialize_compressed(&mut message_bytes)
-            .expect("The message must be a scalar field element;qed");
-        let ciphertext = HashedElGamal::encrypt(
-            message_bytes
-                .try_into()
-                .expect("The message byte length should be correct"), 
-                params.h, 
-                params.g, 
-                &mut rng
-            ).unwrap();
-            // TODO handle errors properly
-        let commitment: Commitment<C> = params.g * message + params.h * message;
-
-        let k = C::ScalarField::rand(&mut rng);
-        let s = params.g * k;
-        let t = params.h * k;
-
-        let mut s_bytes = Vec::new();
-        let mut t_bytes = Vec::new();
-        s.serialize_compressed(&mut s_bytes)
-            .expect("group element should exist");
-        t.serialize_compressed(&mut t_bytes)
-            .expect("group element should exist");
-
-        // prepare input for shake128
-        let mut inputs = Vec::new();
-        inputs.push(s_bytes);
-        inputs.push(t_bytes);
-        let mut c1_bytes = Vec::new();
-        ciphertext.c1
-            .serialize_compressed(&mut c1_bytes)
-            .unwrap();
-        inputs.push(c1_bytes);
-        inputs.push(ciphertext.c2.to_vec());
-
-        let challenge: C::ScalarField =
-            C::ScalarField::from_be_bytes_mod_order(&shake128(inputs.as_ref()));
-        let z = k + challenge * message;
-        PoK { s, t, z, commitment, ciphertext }
-    }
-
-    /// verify a proof that a commitment is of the preimage of an el gamal ciphertext
-    /// outputs true if the proof is valid, false otherwise
-    /// 
-    /// * `params`: The parameters required to verify the proof (two group generators required)
-    ///
-    pub fn verify(
-        &self,
-        params: Params<C>,
-    ) -> bool {
-        let mut s_bytes = Vec::new();
-        let mut t_bytes = Vec::new();
-        self.s.serialize_compressed(&mut s_bytes)
-            .expect("group elements are serializable");
-        self.t.serialize_compressed(&mut t_bytes)
-            .expect("group elements are serializable");
-
-        let mut inputs = Vec::new();
-        inputs.push(s_bytes);
-        inputs.push(t_bytes);
-        let mut c1_bytes = Vec::new();
-        self.ciphertext.c1.serialize_compressed(&mut c1_bytes)
-            .expect("the group element must be serializable");
-        inputs.push(c1_bytes);
-        inputs.push(self.ciphertext.c2.to_vec());
-
-
-        let challenge: C::ScalarField =
-            C::ScalarField::from_be_bytes_mod_order(&shake128(inputs.as_ref()));
-
-        let zg = params.g * self.z;
-        let zh = params.h * self.z;
-
-        zg + zh == self.s + self.t + self.commitment * challenge
-    }
 }
 
 impl<C: CurveGroup> BatchPoK<C> {
@@ -191,7 +80,8 @@ impl<C: CurveGroup> BatchPoK<C> {
 
         let batch_data: Vec<(Ciphertext<C>, Commitment<C>)> = messages.into_iter().map(|m| {
             let mut message_bytes = Vec::new();
-            m.serialize_compressed(&mut message_bytes).expect("The messager should be serializable");
+            m.serialize_compressed(&mut message_bytes)
+                .expect("The messager should be serializable");
             // TODO: error handling
             let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(
                 message_bytes
@@ -314,31 +204,30 @@ mod test {
     use ark_std::{ops::Mul, test_rng};
 
     #[test]
-    pub fn prove_and_verify() {
+    pub fn hegs_batch_prove_and_verify_single_secret() {
         let mut rng = test_rng();
         // the secret key
         let x = <JubJub as Group>::ScalarField::rand(&mut rng);
+        let m = <JubJub as Group>::ScalarField::rand(&mut rng);
+
+        let mut m_bytes = Vec::new();
+        m.serialize_compressed(&mut m_bytes).unwrap();
+        
+        // the public key
         let g: JubJub = JubJub::generator().into();
         let h: JubJub = g.mul(x).into();
-        let params = Params { g, h };
 
-        let message = <JubJub as Group>::ScalarField::rand(&mut rng);
-
-        let proof = PoK::prove(message, params.clone(), test_rng());
-        let result = proof.verify(params);
-
+        let proof = BatchPoK::prove(&vec![m], h, test_rng());
+        let result = proof.verify(h);
         assert_eq!(result, true);
 
-        // and we can decrypt the ciphertext
-        let recovered = HashedElGamal::decrypt(x, proof.ciphertext).unwrap();
-
-        let mut message_bytes = Vec::new();
-        message.serialize_compressed(&mut message_bytes).unwrap();
-        assert_eq!(recovered.to_vec(), message_bytes);
+        assert_eq!(1, proof.ciphertexts.clone().len());
+        let n = HashedElGamal::decrypt(x, proof.ciphertexts[0].clone()).unwrap();
+        assert_eq!(m_bytes, n);
     }
 
     #[test]
-    pub fn batch_prove_and_verify() {
+    pub fn hegs_batch_prove_and_verify_two_secrets() {
         let mut rng = test_rng();
         // the secret key
         let x = <JubJub as Group>::ScalarField::rand(&mut rng);
@@ -351,8 +240,8 @@ mod test {
         let mut m2_bytes = Vec::new();
         m2.serialize_compressed(&mut m2_bytes).unwrap();
         
-        let g: JubJub = JubJub::generator().into();
         // the public key
+        let g: JubJub = JubJub::generator().into();
         let h: JubJub = g.mul(x).into();
 
         let proof = BatchPoK::prove(&vec![m1, m2], h, test_rng());
@@ -367,7 +256,7 @@ mod test {
     }
 
     #[test]
-    pub fn verify_fails_with_invalid_challenge() {
+    pub fn hegs_verify_fails_with_invalid_challenge() {
         let mut rng = test_rng();
         // the secret key
         let x = <JubJub as Group>::ScalarField::rand(&mut rng);
@@ -376,27 +265,28 @@ mod test {
         let h: JubJub = g.mul(x).into();
 
         let j = <JubJub as Group>::ScalarField::rand(&mut rng);
-        let bad_proof = PoK {
+        let bad_proof = BatchPoK::<JubJub> {
             s: g.mul(j).into(),
             t: g.mul(j).into(),
             z: j,
             commitment: g.mul(j).into(),
-            ciphertext: Ciphertext {
+            ciphertexts: vec![Ciphertext {
                 c1: g.mul(j).into(),
                 c2: [1;32],
-            }
+            }]
         };
 
-        let params = Params { g, h };
-        let result = bad_proof.verify(params);
+        // let params = Params { g, h };
+        let result = bad_proof.verify(h);
         assert_eq!(result, false);
     }
 
     #[test]
-    pub fn verify_fails_with_invalid_commitment() {
+    pub fn hegs_verify_fails_with_invalid_commitment() {
         let mut rng = test_rng();
         // the secret key
         let x = <JubJub as Group>::ScalarField::rand(&mut rng);
+        let x_prime = <JubJub as Group>::ScalarField::rand(&mut rng);
         let g: JubJub = JubJub::generator().into();
         // the public key
         let h: JubJub = g.mul(x).into();
@@ -404,16 +294,16 @@ mod test {
         let j = <JubJub as Group>::ScalarField::rand(&mut rng);
         let bad_commitment = g.mul(j).into();
 
-        let params = Params { g, h };
+        // let params = Params { g, h };
 
-        let mut proof = PoK::prove(x, params.clone(), test_rng());
+        let mut proof = BatchPoK::prove(&vec![x, x_prime], g.clone(), test_rng());
         proof.commitment = bad_commitment;
-        let result = proof.verify(params);
+        let result = proof.verify(h);
         assert_eq!(result, false);
     }
 
     #[test]
-    pub fn verify_fails_with_invalid_ciphertext() {
+    pub fn hegs_verify_fails_with_invalid_ciphertext() {
         let mut rng = test_rng();
         // the secret key
         let x = <JubJub as Group>::ScalarField::rand(&mut rng);
@@ -422,16 +312,16 @@ mod test {
         let h: JubJub = g.mul(x).into();
 
         let j = <JubJub as Group>::ScalarField::rand(&mut rng);
-        let bad_ciphertext = Ciphertext {
+        let bad_ciphertext = vec![Ciphertext {
             c1: g.mul(j).into(),
             c2: [1;32],
-        };
+        }];
 
-        let params = Params { g, h };
+        // let params = Params { g, h };
 
-        let mut proof = PoK::prove(x, params.clone(), test_rng());
-        proof.ciphertext = bad_ciphertext;
-        let result = proof.verify(params);
+        let mut proof = BatchPoK::prove(&vec![x], g.clone(), test_rng());
+        proof.ciphertexts = bad_ciphertext;
+        let result = proof.verify(h);
         assert_eq!(result, false);
     }
 }
