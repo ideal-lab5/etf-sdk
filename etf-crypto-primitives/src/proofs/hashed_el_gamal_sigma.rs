@@ -25,7 +25,6 @@ use sha3::{
 use serde::{Deserialize, Serialize};
 use crate::{
     encryption::hashed_el_gamal::{Ciphertext, HashedElGamal},
-    types::ProtocolParams as Params,
     ser::{ark_de, ark_se},
 };
 
@@ -72,13 +71,13 @@ impl<C: CurveGroup> BatchPoK<C> {
         messages: &[C::ScalarField],
         pk: C,
         mut rng: R,
-    ) -> BatchPoK<C> {
+    ) -> Result<BatchPoK<C>, Error> {
         let g = C::generator();
         
         let aggregated_messages = (0..messages.len())
             .fold(C::ScalarField::zero(), |acc, val| acc + messages[val]);
 
-        let batch_data: Vec<(Ciphertext<C>, Commitment<C>)> = messages.into_iter().map(|m| {
+        let batch_data: Vec<(Ciphertext<C>, Commitment<C>)> = messages.iter().map(|m| {
             let mut message_bytes = Vec::new();
             m.serialize_compressed(&mut message_bytes)
                 .expect("The buffer must have sufficient space allocated");
@@ -87,9 +86,8 @@ impl<C: CurveGroup> BatchPoK<C> {
                 message_bytes
                     .try_into()
                     .expect("The buffer must have sufficient space allocated"),
-                pk, 
-                g, 
-                &mut rng).unwrap(); // TODO: ERROR HANDLING
+                pk, g, &mut rng)
+                .expect("the input elements must be correct");
             let commitment: Commitment<C> = g * m + pk * m;
             (ciphertext, commitment)
         }).collect::<Vec<_>>();
@@ -128,11 +126,11 @@ impl<C: CurveGroup> BatchPoK<C> {
         let challenge: C::ScalarField =
             C::ScalarField::from_be_bytes_mod_order(&shake128(inputs.as_ref()));
         let z = k + challenge * aggregated_messages;
-        BatchPoK { 
+        Ok(BatchPoK { 
             s, t, z, 
             commitment: batch_commitment,
             ciphertexts,
-        }
+        })
     }
 
     /// verify a proof that a commitment is of the preimage of an el gamal ciphertext
@@ -218,7 +216,7 @@ mod test {
         let g: JubJub = JubJub::generator().into();
         let h: JubJub = g.mul(x).into();
 
-        let proof = BatchPoK::prove(&vec![m], h, test_rng());
+        let proof = BatchPoK::prove(&vec![m], h, test_rng()).unwrap();
         let result = proof.verify(h);
         assert_eq!(result, true);
 
@@ -245,7 +243,7 @@ mod test {
         let g: JubJub = JubJub::generator().into();
         let h: JubJub = g.mul(x).into();
 
-        let proof = BatchPoK::prove(&vec![m1, m2], h, test_rng());
+        let proof = BatchPoK::prove(&vec![m1, m2], h, test_rng()).unwrap();
         let result = proof.verify(h);
         assert_eq!(result, true);
 
@@ -297,7 +295,7 @@ mod test {
 
         // let params = Params { g, h };
 
-        let mut proof = BatchPoK::prove(&vec![x, x_prime], g.clone(), test_rng());
+        let mut proof = BatchPoK::prove(&vec![x, x_prime], g.clone(), test_rng()).unwrap();
         proof.commitment = bad_commitment;
         let result = proof.verify(h);
         assert_eq!(result, false);
@@ -320,7 +318,7 @@ mod test {
 
         // let params = Params { g, h };
 
-        let mut proof = BatchPoK::prove(&vec![x], g.clone(), test_rng());
+        let mut proof = BatchPoK::prove(&vec![x], g.clone(), test_rng()).unwrap();
         proof.ciphertexts = bad_ciphertext;
         let result = proof.verify(h);
         assert_eq!(result, false);

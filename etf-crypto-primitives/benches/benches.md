@@ -1,9 +1,20 @@
-when nothing was benched...
+# Benchmarking Guide
 
-Gnuplot not found, using plotters backend
-acss_reshare            time:   [17.662 µs 18.019 µs 18.465 µs]
-                        change: [-12.242% -8.2669% -4.3530%] (p = 0.00 < 0.05)
-                        Performance has improved.
-Found 8 outliers among 100 measurements (8.00%)
-  5 (5.00%) high mild
-  3 (3.00%) high severe
+Benchmarking is performed using [criterion](https://github.com/bheisler/criterion.rs). 
+
+## Running
+
+To execute benchmarks, run `cargo bench` from the root directory. 
+
+The output can be found in `/target/criterion/your_bench_target`. It constructs html reports that can be viewed in a browser.
+
+## Adding new Benches
+
+To add a new bench:
+1. create a new file under etf-crypto-primitives/benches for example `my_new_bench.rs`
+2. register your benchmark in the etf-crypto-primitives Cargo.toml by adding:
+``` toml
+[[bench]]
+name = "my_new_bench"
+harness = false
+```

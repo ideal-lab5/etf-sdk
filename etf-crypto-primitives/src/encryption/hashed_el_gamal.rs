@@ -53,11 +53,7 @@ impl<C: CurveGroup> Ciphertext<C> {
     pub fn add(self, ct: Ciphertext<C>) -> Self {
         Ciphertext {
             c1: self.c1 + ct.c1,
-            c2: cross_product::<32>(
-                &self.c2, 
-                &ct.c2,
-            ).try_into()
-            .expect("The second parameter of a ciphertext must be 32 bytes"),
+            c2: cross_product::<32>(&self.c2, &ct.c2)
         }
     }
 }

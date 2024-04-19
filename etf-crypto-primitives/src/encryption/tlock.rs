@@ -104,10 +104,7 @@ impl<E: EngineBLS> Tlock<E> {
         ibe_secrets: Vec<IBESecret<E>>,
     ) -> Result<DecryptionResult, ClientError> {
         let mut dec_secrets: Vec<(E::Scalar, E::Scalar)> = Vec::new();
-        // // ensure capsule and secrets have the same size, will need to modify shortly...
-        // if ciphertext.etf_ct.len() < ibe_secrets.len() {
-        //     return Err(ClientError::VectorDimensionMismatch);
-        // }
+
         for (idx, sk) in ibe_secrets.iter().enumerate() {
             let expected_ct = &ciphertext.etf_ct[idx];
 

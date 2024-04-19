@@ -7,6 +7,9 @@ use w3f_bls::{KeypairVT, PublicKey, TinyBLS377};
 use etf_crypto_primitives::dpss::{DoubleSecret, Keypair};
 use rand_core::OsRng;
 
+/// this runs the 'worst case scenario' for the ACSS algorithm
+/// here we create a resharing and then the committee linearly recovers it on a single thread
+/// i.e. they run the recover algorithm one after the other
 fn acss_reshare_with_single_threaded_recovery_tinybls377(
     double_secret: DoubleSecret<TinyBLS377>,
     committee_public: &[PublicKey<TinyBLS377>],
@@ -20,10 +23,10 @@ fn acss_reshare_with_single_threaded_recovery_tinybls377(
     });
 }
 
-fn from_elem(c: &mut Criterion) {
+fn acss(c: &mut Criterion) {
     static KB: usize = 1024;   
 
-    let mut group = c.benchmark_group("from_elem");
+    let mut group = c.benchmark_group("acss");
     for size in [3, 5, 10, 20, 50].iter() {
         let keys: Vec<KeypairVT<TinyBLS377>> = (0..*size).map(|_| {
             KeypairVT::<TinyBLS377>::generate(&mut OsRng)
@@ -46,5 +49,5 @@ fn from_elem(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, from_elem);
+criterion_group!(benches, acss);
 criterion_main!(benches);

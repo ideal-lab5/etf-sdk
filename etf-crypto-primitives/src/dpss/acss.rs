@@ -47,6 +47,7 @@ pub enum ACSSError {
     InvalidProof,
     /// insufficiently many valid proofs of knowledge were provided
     InsufficientValidPoK,
+    InvalidMessage,
 }
 
 /// a double secret holds two elements of the scalar field
@@ -94,7 +95,7 @@ impl<E: EngineBLS> Keypair<E> {
         pok: BatchPoK<E::PublicKeyGroup>, 
         threshold: u8
     ) -> Result<DoubleSecret<E>, ACSSError> {
-        let secret = self.0.secret.0.clone();
+        let secret = self.0.secret.0;
         HighThresholdACSS::<E>::recover(secret, vec![pok], threshold)
     }
 }
@@ -122,7 +123,7 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
         mut rng: R,
     ) -> Result<Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
 
-        if committee.len() == 0 {
+        if committee.is_empty() {
             return Err(ACSSError::InvalidCommittee);
         }
 
@@ -137,7 +138,11 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
         for (pk, (u, u_hat)) in committee.iter()
             .zip(evals.iter()
             .zip(evals_hat.iter())) {
-            poks.push((*pk, BatchPoK::prove(&vec![*u.1, *u_hat.1], pk.0, &mut rng)));
+            if let Ok(pok) = BatchPoK::prove(&[*u.1, *u_hat.1], pk.0, &mut rng) {
+                poks.push((*pk, pok));
+            } else {
+                return Err(ACSSError::InvalidMessage)
+            }
         }
 
         Ok(poks)
@@ -293,7 +298,7 @@ pub mod tests {
                 &vec![E::Scalar::one(), E::Scalar::one()], 
                 E::PublicKeyGroup::generator(), 
                 test_rng()
-            )
+            ).unwrap()
         );
 
         match double_secret.reshare(initial_committee_public_keys.as_slice(), t, &mut rng) {
