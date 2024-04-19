@@ -53,8 +53,10 @@ pub struct DecryptionResult {
 // #[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
 #[derive(Debug)]
 pub struct TLECiphertext<E: EngineBLS> {
+    /// the identity for which the ciphertext was encrypted
+    pub identity: Identity,
     pub aes_ct: AESOutput,
-    pub etf_ct: Vec<IBECiphertext<E>>
+    pub etf_ct: IBECiphertext<E>
 }
 
 #[derive(Debug, PartialEq)]
@@ -77,47 +79,37 @@ impl<E: EngineBLS> Tlock<E> {
     pub fn encrypt<R: Rng + CryptoRng + Sized>(
         p_pub: E::PublicKeyGroup,
         message: &[u8],
-        ids: Vec<Identity>,
-        threshold: u8,
+        id: Identity,
         mut rng: R,
     ) -> Result<TLECiphertext<E>, ClientError> {
-        // TODO: check 1 < t <= ids
-        let (msk, shares) = generate_secrets::<E, R>(ids.len() as u8, threshold, &mut rng);
+        let msk = E::Scalar::rand(&mut rng);
         let msk_bytes = convert_to_bytes::<E::Scalar, 32>(msk);
         let ct_aes = aes::encrypt(message, msk_bytes, &mut rng)
             .map_err(|_| ClientError::AesEncryptError)?;
-            
-        let mut out: Vec<IBECiphertext<E>> = Vec::new();
-        for (idx, id) in ids.iter().enumerate() {
-            let b: [u8;32] = convert_to_bytes::<E::Scalar, 32>(shares[idx].1);
-            let ct: IBECiphertext<E> = id.encrypt(&b, p_pub, &mut rng);
-            out.push(ct);
-        }
-        Ok(TLECiphertext { aes_ct: ct_aes, etf_ct: out })
+
+        let b: [u8;32] = convert_to_bytes::<E::Scalar, 32>(msk);
+        let ct: IBECiphertext<E> = id.encrypt(&b, p_pub, &mut rng);
+        Ok(TLECiphertext { 
+            identity: id, 
+            aes_ct: ct_aes, 
+            etf_ct: ct
+        })
     }
 
     /// the order of the ibe_secrets should match the order 
     /// in which the ciphertexts were created
     pub fn decrypt(
-        // ibe_pp: Vec<u8>,
         ciphertext: TLECiphertext<E>,
         ibe_secrets: Vec<IBESecret<E>>,
     ) -> Result<DecryptionResult, ClientError> {
         let mut dec_secrets: Vec<(E::Scalar, E::Scalar)> = Vec::new();
-
-        for (idx, sk) in ibe_secrets.iter().enumerate() {
-            let expected_ct = &ciphertext.etf_ct[idx];
-
-            let share_bytes = sk.decrypt(expected_ct)
-                .map_err(|_| ClientError::DecryptionError)?;
-
-            let share = E::Scalar::deserialize_compressed(&share_bytes[..])
+        // interpolate the ibe_secrets
+        let shares: Vec<E::SignatureGroup> = ibe_secrets.iter().map(|share| share.0).collect();
+        let sig = crate::utils::interpolate_threshold_bls::<E>(shares);
+        let secret_bytes = IBESecret(sig).decrypt(&ciphertext.etf_ct)
+            .map_err(|_| ClientError::DecryptionError)?;
+        let secret_scalar = E::Scalar::deserialize_compressed(&secret_bytes[..])
                 .map_err(|_| ClientError::DeserializationError)?;
-
-            dec_secrets.push((E::Scalar::from((idx + 1) as u8), share));
-        }
-
-        let secret_scalar = interpolate::<E>(dec_secrets);
         let o = convert_to_bytes::<E::Scalar, 32>(secret_scalar);
 
         if let Ok(plaintext) = aes::decrypt(AESOutput{
@@ -228,7 +220,7 @@ mod test {
         let mut rng = ChaCha20Rng::from_seed([4;32]);
         let message = b"this is a test message".to_vec();
         let id = Identity::new(b"id1");
-        let ids = vec![id.clone()];
+        // let ids = vec![id.clone()];
         let t = 1;
         // setup the IBE system
         let msk = <E as EngineBLS>::Scalar::rand(&mut test_rng());
@@ -237,7 +229,7 @@ mod test {
 
         let sk = id.extract::<E>(msk);
 
-        match Tlock::<E>::encrypt(p_pub, &message, ids, t, &mut rng) {
+        match Tlock::<E>::encrypt(p_pub, &message, id, &mut rng) {
             Ok(ct) => {
                 match Tlock::<E>::decrypt(ct, vec![sk]) {
                     Ok(output) => {
@@ -257,29 +249,21 @@ mod test {
     fn threshold_tlock_works<E: EngineBLS, R: Rng + Sized + CryptoRng>() {
         // let mut rng = ChaCha20Rng::from_seed([4;32]);
         let message = b"this is a test message".to_vec();
-        let id1 = Identity::new(b"id1");
-        let id2 = Identity::new(b"id2");
-        let id3 = Identity::new(b"id3");
-
-        // let ids = vec![id1.clone(), id2.clone(), id3.clone()];
-        let ids = vec![id1.clone()];
+        let id = Identity::new(b"id");
+        // the total number of shares
+        let n = 5;
+        // the threshold required to interpolate later on
         let t = 3;
-        // then we need to create a resharing to each of the participants
-        // in reality this is done with the ACSS algorithm
-        // for testing, we just use basic Shamir
-        let (msk, shares) = generate_secrets::<E, OsRng>(ids.len() as u8, t, &mut OsRng);
+        let (msk, shares) = generate_secrets::<E, OsRng>(n, t, &mut OsRng);
+        // let msk = E::Scalar::generate(&mut OsRng);
         // // then we need out p_pub = msk * P \in G_1
         let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
         // e.g. s_1 * Q, s_2 * Q, ..., s_n * Q where Q = H_1(identity string)
-        let ibe_secrets: Vec<IBESecret<E>> = 
-            shares.iter()
-                .enumerate()
-                .map(|(idx, share)| ids[idx].extract(share.1))
-                .collect::<Vec<_>>();
-    
-        match Tlock::<E>::encrypt(p_pub, &message, ids, t, &mut OsRng) {
+        let threshold_signatures = (0..t).map(|i| id.extract::<E>(shares[i as usize].1))
+            .collect();
+        match Tlock::<E>::encrypt(p_pub, &message, id, &mut OsRng) {
             Ok(ct) => {
-                match Tlock::<E>::decrypt(ct, ibe_secrets) {
+                match Tlock::<E>::decrypt(ct, threshold_signatures) {
                     Ok(output) => {
                         assert_eq!(output.message, message);
                     }, 
@@ -295,13 +279,36 @@ mod test {
     }
 
     #[test]
-    pub fn client_can_encrypt_decrypt_with_single_identity() {
+    pub fn tlock_can_encrypt_decrypt_with_single_identity() {
         basic_tlock_works::<TinyBLS377>();
     }
 
+    // #[test]
+    // pub fn tlock_can_encrypt_decrypt_with_many_identities_full_threshold() {
+    //     threshold_tlock_works::<TinyBLS377, OsRng>();
+    // }
+
+    pub fn threshold_bls_works<E: EngineBLS>() {
+        let n = 5;
+        // the threshold required to interpolate later on
+        let t = 3;
+        let id = Identity::new(b"id");
+
+        let (msk, shares) = generate_secrets::<E, OsRng>(n, t, &mut OsRng);
+        // let msk = E::Scalar::generate(&mut OsRng);
+        // // then we need out p_pub = msk * P \in G_1
+        let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
+        // e.g. s_1 * Q, s_2 * Q, ..., s_n * Q where Q = H_1(identity string)
+        let threshold_signatures = (0..t).map(|i| id.extract::<E>(shares[i as usize].1).0).collect();
+        let interpolated_sig = crate::utils::interpolate_threshold_bls::<E>(threshold_signatures);
+        // let secret_bytes = IBESecret(sig).decrypt(&ciphertext.etf_ct)
+        //     .map_err(|_| ClientError::DecryptionError)?;
+        // let secret_scalar = E::Scalar::deserialize_compressed(&secret_bytes[..])
+        //         .map_err(|_| ClientError::DeserializationError)?;
+    }
     #[test]
-    pub fn client_can_encrypt_decrypt_with_many_identities_full_threshold() {
-        threshold_tlock_works::<TinyBLS377, OsRng>();
+    pub fn test_threshold_bls_works() {
+        threshold_bls_works::<TinyBLS377>();
     }
 
 //     #[test]

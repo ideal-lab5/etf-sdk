@@ -4,7 +4,10 @@ use ark_ff::{Field, PrimeField, Zero, One};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_bls12_381::{Fr, G1Affine};
-use ark_std::vec::Vec;
+use ark_std::{
+    ops::Mul,
+    vec::Vec
+};
 
 use alloc::borrow::ToOwned;
 
@@ -99,6 +102,28 @@ pub fn convert_to_bytes<E: CanonicalSerialize, const N: usize>(k: E) -> [u8;N] {
 	k.serialize_compressed(&mut out).unwrap_or(());
 	let o: [u8; N] = out.try_into().unwrap_or([0;N]);
 	o
+}
+
+/// Interpolate threshold BLS signatures using Lagrange interpolation
+pub fn interpolate_threshold_bls<E: EngineBLS>(sigs: Vec<E::SignatureGroup>) -> E::SignatureGroup {
+    let n = sigs.len();
+    let mut aggregated_signature = E::SignatureGroup::zero();
+
+    for i in 0..n {
+        let mut basis_value = E::Scalar::one();
+        for j in 0..n {
+            if i != j {
+                let xi = E::Scalar::from(i as u8);
+                let xj = E::Scalar::from(j as u8); 
+                let denominator = xj - xi;
+                let numerator = xj;
+                basis_value *= numerator * denominator.inverse().unwrap();
+            }
+        }
+        aggregated_signature += sigs[i].mul(basis_value);
+    }
+
+    aggregated_signature
 }
 
 /// interpolate a polynomial from the input and evaluate it at 0
