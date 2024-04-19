@@ -53,6 +53,11 @@ pub enum ACSSError {
 pub struct DoubleSecret<E: EngineBLS>(pub E::Scalar, pub E::Scalar);
 
 impl <E: EngineBLS> DoubleSecret<E> {
+
+    pub fn rand<R: Rng + CryptoRng>(mut rng: R) -> Self {
+        DoubleSecret::<E>(E::Scalar::rand(&mut rng), E::Scalar::rand(&mut rng))
+    }
+
     /// create a resharing of a double secret with a committee
     ///
     /// * `committee`: The committee to reshare to
@@ -72,10 +77,11 @@ impl <E: EngineBLS> DoubleSecret<E> {
     }
 }
 
-/// a wrapper around a keypair
-pub struct SKWrapper<E: EngineBLS>(pub KeypairVT<E>);
+/// a wrapper around a keypair vartime...
+/// could get confusing with w3f-bls keypair, maybe add conversion?
+pub struct Keypair<E: EngineBLS>(pub KeypairVT<E>);
 
-impl<E: EngineBLS> SKWrapper<E> {
+impl<E: EngineBLS> Keypair<E> {
     /// try to recover a double secret key from a resharing
     /// returns none if ACSS recovery fails
     ///
@@ -260,7 +266,7 @@ pub mod tests {
         },
     }
 
-    fn acss_with_engine_bls<E: EngineBLS>(
+    pub fn acss_with_engine_bls<E: EngineBLS>(
         m: u8,
         t: u8,
         num_actual_signers: u8,
@@ -303,7 +309,7 @@ pub mod tests {
                 // then each member of the committee recovers a share
                 keys.iter().enumerate().for_each(|(idx, kp)| {
 
-                    let w = SKWrapper(kp.into_vartime());
+                    let w = Keypair(kp.into_vartime());
                     let r = resharing[idx].1.clone();
 
                     match w.recover(r, t) {

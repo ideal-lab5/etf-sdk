@@ -15,4 +15,5 @@
  */
 pub mod acss;
 
-pub use acss::SKWrapper as SKWrapper;
+pub use acss::DoubleSecret as DoubleSecret;
+pub use acss::Keypair as Keypair;

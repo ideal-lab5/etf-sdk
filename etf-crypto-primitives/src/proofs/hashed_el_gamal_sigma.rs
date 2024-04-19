@@ -81,12 +81,12 @@ impl<C: CurveGroup> BatchPoK<C> {
         let batch_data: Vec<(Ciphertext<C>, Commitment<C>)> = messages.into_iter().map(|m| {
             let mut message_bytes = Vec::new();
             m.serialize_compressed(&mut message_bytes)
-                .expect("The messager should be serializable");
+                .expect("The buffer must have sufficient space allocated");
             // TODO: error handling
             let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(
                 message_bytes
                     .try_into()
-                    .expect("The message was a scalar field element and so has the right size"), 
+                    .expect("The buffer must have sufficient space allocated"),
                 pk, 
                 g, 
                 &mut rng).unwrap(); // TODO: ERROR HANDLING
@@ -111,16 +111,17 @@ impl<C: CurveGroup> BatchPoK<C> {
         let mut s_bytes = Vec::new();
         let mut t_bytes = Vec::new();
         s.serialize_compressed(&mut s_bytes)
-            .expect("group element should exist");
+            .expect("The buffer must have sufficient space allocated");
         t.serialize_compressed(&mut t_bytes)
-            .expect("group element should exist");
+            .expect("The buffer must have sufficient space allocated");
 
         // prepare input for shake128
         let mut inputs = Vec::new();
         inputs.push(s_bytes);
         inputs.push(t_bytes);
         let mut c1_bytes = Vec::new();
-        batch_ciphertext.c1.serialize_compressed(&mut c1_bytes).expect("group elements are serializable");
+        batch_ciphertext.c1.serialize_compressed(&mut c1_bytes)
+            .expect("The buffer must have sufficient space allocated");
         inputs.push(c1_bytes);
         inputs.push(batch_ciphertext.c2.to_vec());
 

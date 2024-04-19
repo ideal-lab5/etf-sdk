@@ -4,14 +4,12 @@ Crypto primtives used by the etf network and sdk.
 
 The repo is organized as:
 - Encryption
-    - AES-GCM 
-    - RMVEC
+    - Hashed El Gamal 
     - BF-IBE (FullIdent)
+    - Tlock 
 - Proofs
-    - DLEQ proofs
-    - El Gamal Sigma Protocol
-- DPSS: The dynamic committee proactive secret sharing implementation
-- Client: Timelock Encryption Implementation
+    - Hashed El Gamal Sigma Protocol
+- DPSS: dynamic committee proactive secret sharing implementation
 
 This repo has not been audited for security and should not yet be used in production.
 
@@ -30,12 +28,18 @@ sudo apt install build-essential
 
 ## Build
 
-``` rust
+``` shell
 cargo build
+```
+
+## Benchmarks
+
+``` shell
+cargo benchmark
 ```
 
 ## Test
 
-``` rust
-cargo +nightly test
+``` shell
+cargo test
 ```
