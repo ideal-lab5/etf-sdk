@@ -105,7 +105,9 @@ pub fn convert_to_bytes<E: CanonicalSerialize, const N: usize>(k: E) -> [u8;N] {
 }
 
 /// Interpolate threshold BLS signatures using Lagrange interpolation
-pub fn interpolate_threshold_bls<E: EngineBLS>(sigs: Vec<E::SignatureGroup>) -> E::SignatureGroup {
+pub fn interpolate_threshold_bls<E: EngineBLS>(
+    sigs: Vec<(E::Scalar, E::SignatureGroup)>
+) -> E::SignatureGroup {
     let n = sigs.len();
     let mut aggregated_signature = E::SignatureGroup::zero();
 
@@ -113,14 +115,14 @@ pub fn interpolate_threshold_bls<E: EngineBLS>(sigs: Vec<E::SignatureGroup>) -> 
         let mut basis_value = E::Scalar::one();
         for j in 0..n {
             if i != j {
-                let xi = E::Scalar::from(i as u8);
-                let xj = E::Scalar::from(j as u8); 
+                let xi = sigs[i].0;
+                let xj = sigs[j].0;
                 let denominator = xj - xi;
                 let numerator = xj;
                 basis_value *= numerator * denominator.inverse().unwrap();
             }
         }
-        aggregated_signature += sigs[i].mul(basis_value);
+        aggregated_signature += sigs[i].1.mul(basis_value);
     }
 
     aggregated_signature
