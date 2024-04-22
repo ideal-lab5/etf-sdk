@@ -15,3 +15,13 @@ We aim for a minimum of 85% coverage on all lines. To check coverage, we use tar
 ``` bash
 cargo tarpaulin --rustflags="-C opt-level=0"
 ```
+
+## Benchmarks
+
+Navigate to the etf-crypto-primitives directory and run:
+
+```
+cargo bench
+```
+
+See [the benches dir](./etf-crypto-primitives/benches/) for more info.

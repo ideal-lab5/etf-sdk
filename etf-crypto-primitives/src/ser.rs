@@ -1,3 +1,18 @@
+/*
+ * Copyright 2024 by Ideal Labs, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 // https://github.com/arkworks-rs/algebra/issues/178
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use alloc::vec::Vec;
@@ -23,8 +38,7 @@ where D: serde::de::Deserializer<'de> {
 mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
-    use serde_json::Deserializer;
-    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use alloc::vec::Vec;
 
       #[derive(
@@ -42,7 +56,7 @@ mod tests {
                   field1: 42,
             };
             // Serialize the struct using `ark_se`
-            let mut ark_se_result = ark_se(&test_struct,  &mut serde_json::Serializer::new(Vec::new()));
+            let ark_se_result = ark_se(&test_struct,  &mut serde_json::Serializer::new(Vec::new()));
 
             // Check if serialization was successful
             assert!(ark_se_result.is_ok());

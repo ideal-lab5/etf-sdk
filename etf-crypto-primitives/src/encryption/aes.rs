@@ -1,3 +1,19 @@
+/*
+ * Copyright 2024 by Ideal Labs, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
 use aes_gcm::{
     aead::{Aead, AeadCore, AeadInPlace, KeyInit},
     Aes256Gcm, Nonce,
@@ -24,6 +40,7 @@ pub enum Error {
     EncryptionError,
     DecryptionError,
     InvalidKey,
+    BadNonce,
 }
 
 /// AES-GCM encryption of the message using an ephemeral keypair
@@ -63,6 +80,12 @@ pub fn decrypt(
 ) -> Result<Vec<u8>, Error> {
     let cipher = Aes256Gcm::new_from_slice(&ct.key)
         .map_err(|_| Error::InvalidKey)?;
+    // lets check the nonce... not great way to do it but ok for now
+    // TODO:get a valid nonce size as a constant
+    if ct.nonce.len() != 12 {
+        // panic!("{:?}", ct.nonce.len());
+        return Err(Error::BadNonce);
+    }
     let nonce = Nonce::from_slice(&ct.nonce);
     let plaintext = cipher.decrypt(nonce, ct.ciphertext.as_ref())
         .map_err(|_| Error::DecryptionError)?;
@@ -123,7 +146,7 @@ mod test {
     }
      
     #[test]
-    pub fn aes_encrypt_decrypt_fails_with_bad_nonce() {
+    pub fn aes_encrypt_decrypt_fails_with_invalid_nonce() {
         let msg = b"test";
         let rng = ChaCha20Rng::from_seed([3;32]);
         match encrypt(msg, [2;32], rng) {
@@ -139,6 +162,32 @@ mod test {
                     }, 
                     Err(e) => {
                         assert_eq!(e, Error::DecryptionError);
+                    }
+                }
+            },
+            Err(_) => {
+                panic!("test should pass");
+            }
+        }
+    }
+
+    #[test]
+    pub fn aes_encrypt_decrypt_fails_with_bad_length_nonce() {
+        let msg = b"test";
+        let rng = ChaCha20Rng::from_seed([3;32]);
+        match encrypt(msg, [2;32], rng) {
+            Ok(aes_out) => {
+                let bad = AESOutput {
+                    ciphertext: aes_out.ciphertext,
+                    nonce: vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+                    key: aes_out.key,
+                };
+                match decrypt(bad) {
+                    Ok(_) => {
+                        panic!("should be an error");
+                    }, 
+                    Err(e) => {
+                        assert_eq!(e, Error::BadNonce);
                     }
                 }
             },

@@ -35,8 +35,13 @@ pub type Commitment<C> = C;
 #[derive(Debug)]
 pub enum Error {
     SerializationError,
+    InvalidBufferAllocation,
     EncryptionFailed,
 }
+
+// To investigate: How can I get these values from arkworks instead?
+pub const SERIALIZED_SCALAR_BUFFER_SIZE: usize = 32;
+pub const SERIALIZED_SIG_BUFFER_SIZE: usize = 48;
 
 /// the NIZK PoK with support for batched ciphertexts
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize, CanonicalSerialize, CanonicalDeserialize)]
@@ -67,6 +72,8 @@ impl<C: CurveGroup> BatchPoK<C> {
     /// `params`:
     /// `rng`: 
     ///
+    /// TODO: this functions as is, but we should ideally bound the size of the vectors and properly
+    /// handle the error. For all of our cases, this failing would be a critical fail.
     pub fn prove<R: Rng + Sized>(
         messages: &[C::ScalarField],
         pk: C,
@@ -77,22 +84,7 @@ impl<C: CurveGroup> BatchPoK<C> {
         let aggregated_messages = (0..messages.len())
             .fold(C::ScalarField::zero(), |acc, val| acc + messages[val]);
 
-        let batch_data: Vec<(Ciphertext<C>, Commitment<C>)> = messages.iter().map(|m| {
-            let mut message_bytes = Vec::new();
-            m.serialize_compressed(&mut message_bytes)
-                .expect("The buffer must have sufficient space allocated");
-            // TODO: error handling
-            let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(
-                message_bytes
-                    .try_into()
-                    .expect("The buffer must have sufficient space allocated"),
-                pk, g, &mut rng)
-                .expect("the input elements must be correct");
-            let commitment: Commitment<C> = g * m + pk * m;
-            (ciphertext, commitment)
-        }).collect::<Vec<_>>();
-
-
+        let batch_data = process_batch_data(messages, pk, g, &mut rng)?;
         let ciphertexts = batch_data.iter().map(|b| b.0.clone()).collect::<Vec<_>>();
 
         let mut batch_ciphertext: Ciphertext<C> = ciphertexts[0].clone();
@@ -136,7 +128,7 @@ impl<C: CurveGroup> BatchPoK<C> {
     /// verify a proof that a commitment is of the preimage of an el gamal ciphertext
     /// outputs true if the proof is valid, false otherwise
     /// 
-    /// * `params`: The parameters required to verify the proof (two group generators required)
+    /// * `pk`: the expected public key
     ///
     pub fn verify(
         &self,
@@ -164,7 +156,8 @@ impl<C: CurveGroup> BatchPoK<C> {
         inputs.push(s_bytes);
         inputs.push(t_bytes);
         let mut c1_bytes = Vec::new();
-        ciphertext.c1.serialize_compressed(&mut c1_bytes).expect("group elements should be serializable");
+        ciphertext.c1.serialize_compressed(&mut c1_bytes)
+            .expect("group elements should be serializable");
         inputs.push(c1_bytes);
         inputs.push(ciphertext.c2.to_vec());
 
@@ -177,7 +170,32 @@ impl<C: CurveGroup> BatchPoK<C> {
 
         zg + zh == self.s + self.t + self.commitment * challenge
     }
+}
 
+fn process_batch_data<C: CurveGroup, R: Sized + Rng>(
+    messages: &[C::ScalarField],
+    pk: C,
+    g: C,
+    mut rng: R,
+)-> Result<Vec<(Ciphertext<C>, Commitment<C>)>, Error> {
+
+    let mut output = Vec::new();
+
+    for m in messages {
+        let mut message_bytes = Vec::with_capacity(SERIALIZED_SCALAR_BUFFER_SIZE);
+        let _ = m.serialize_compressed(&mut message_bytes)
+            .map_err(|_| Error::InvalidBufferAllocation)?;
+        let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(
+            message_bytes
+                .try_into()
+                .expect("The buffer must have sufficient space allocated"),
+                pk, g, &mut rng)
+            .map_err(|_| Error::InvalidBufferAllocation)?;
+        let commitment: Commitment<C> = g * m + pk * m;    
+        output.push((ciphertext, commitment));
+    }
+
+    Ok(output)
 }
 
 /// shake128 hash some input

@@ -2,8 +2,8 @@ use criterion::{
     black_box, criterion_group, criterion_main,
     Criterion, BenchmarkId, Throughput
 };
-use core::time::Duration;
-use w3f_bls::{KeypairVT, PublicKey, TinyBLS377};
+use ark_ff::UniformRand;
+use w3f_bls::{EngineBLS, KeypairVT, PublicKey, TinyBLS377};
 use etf_crypto_primitives::dpss::{DoubleSecret, Keypair};
 use rand_core::OsRng;
 
@@ -32,13 +32,15 @@ fn acss(c: &mut Criterion) {
             KeypairVT::<TinyBLS377>::generate(&mut OsRng)
         }).collect();
 
+        let s1 = <TinyBLS377 as EngineBLS>::Scalar::rand(&mut OsRng);
+        let s2 = <TinyBLS377 as EngineBLS>::Scalar::rand(&mut OsRng);
         let initial_committee_public_keys = keys.iter().map(|kp| kp.public).collect::<Vec<_>>();
 
         group.throughput(Throughput::Bytes(KB as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             b.iter(|| {
                 acss_reshare_with_single_threaded_recovery_tinybls377(
-                    black_box(DoubleSecret::rand(&mut OsRng)), 
+                    black_box(DoubleSecret(s1, s2)), 
                     black_box(&initial_committee_public_keys.clone()),
                     black_box(&keys.clone()),
                     black_box(size)

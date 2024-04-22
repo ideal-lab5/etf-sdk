@@ -136,16 +136,9 @@ impl<E: EngineBLS> IBESecret<E> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ark_bls12_377::Bls12_377;
-    use ark_bls12_381::Bls12_381;
-    use ark_ec::bls12::Bls12Config;
-    use ark_ec::hashing::curve_maps::wb::{WBConfig, WBMap};
-    use ark_ec::hashing::map_to_curve_hasher::MapToCurve;
-    use ark_ec::pairing::Pairing as PairingEngine;
-
+    
     use w3f_bls::TinyBLS377;
-
-    use ark_std::{test_rng, UniformRand, rand::RngCore};
+    use ark_std::{test_rng, UniformRand};
 
     // this enum represents the conditions or branches that I want to test
     enum TestStatusReport {
