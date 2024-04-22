@@ -75,9 +75,16 @@ pub struct Tlock<E: EngineBLS> {
     _p: core::marker::PhantomData<E>,
 }
 
-pub struct SecretKey<E: EngineBLS>(E::Scalar);
+// can we make this not public? will do later on..
+pub struct SecretKey<E: EngineBLS>(pub E::Scalar);
 
 impl<E: EngineBLS> SecretKey<E> {
+
+    /// construct a secret key from a scalar
+    pub fn new(sk: E::Scalar) -> Self {
+        Self(sk)
+    }
+
     /// encrypt a message for an identity
     ///
     /// * `p_pub`: the public key commitment for the IBE system (i.e. the setup phase)

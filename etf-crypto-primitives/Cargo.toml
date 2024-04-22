@@ -45,9 +45,16 @@ rand_core = "0.6.4"
 simulacrum = "0.3.0"
 criterion = { version = "0.4", features = ["html_reports"] }
 
-
 [[bench]]
 name = "acss"
+harness = false
+
+[[bench]]
+name = "tlock_single_commitee_dynamic_data"
+harness = false
+
+[[bench]]
+name = "tlock_dynamic_committee_static_data"
 harness = false
 
 [features]

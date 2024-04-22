@@ -27,7 +27,7 @@ fn acss(c: &mut Criterion) {
     static KB: usize = 1024;   
 
     let mut group = c.benchmark_group("acss");
-    for size in [3, 5, 10, 20, 50].iter() {
+    for size in [3, 5, 10, 20, 50, 100].iter() {
         let keys: Vec<KeypairVT<TinyBLS377>> = (0..*size).map(|_| {
             KeypairVT::<TinyBLS377>::generate(&mut OsRng)
         }).collect();
