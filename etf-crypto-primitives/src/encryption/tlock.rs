@@ -19,7 +19,6 @@ use crate::{
     utils::convert_to_bytes,
 };
 
-use ark_ec::Group;
 use ark_ff::{UniformRand, Field, One, Zero};
 use ark_poly::{
     DenseUVPolynomial,
@@ -94,19 +93,17 @@ impl<E: EngineBLS> SecretKey<E> {
     ///
     pub fn encrypt<R: Rng + CryptoRng + Sized>(
         &self,
-        // p_pub: E::PublicKeyGroup,
+        p_pub: E::PublicKeyGroup,
         message: &[u8],
         id: Identity,
         mut rng: R,
     ) -> Result<TLECiphertext<E>, ClientError> {
-        // let msk = E::Scalar::rand(&mut rng);
         let msk = self.0;
-
         let msk_bytes = convert_to_bytes::<E::Scalar, 32>(msk);
         let ct_aes = aes::encrypt(message, msk_bytes, &mut rng)
             .map_err(|_| ClientError::AesEncryptError)?; // not sure how to test this line...
 
-        let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
+        // let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
         let b: [u8;32] = convert_to_bytes::<E::Scalar, 32>(msk);
         let ct: IBECiphertext<E> = id.encrypt(&b, p_pub, &mut rng);
         Ok(TLECiphertext { 
@@ -221,7 +218,8 @@ mod test {
     use w3f_bls::TinyBLS377;
     use ark_std::rand::SeedableRng;
     use rand_core::OsRng;
-
+    use ark_ec::Group;
+    
     // specific conditions that we want to test/verify
     enum TestStatusReport {
         InterpolationComplete { msk: Vec<u8>, recovered_msk: Vec<u8> },
@@ -241,13 +239,13 @@ mod test {
         let message = b"this is a test message".to_vec();
         let id = Identity::new(b"id");
         let (sk, shares) = generate_secrets::<E, OsRng>(n, t, &mut OsRng);
-        let msk = SecretKey::<E>(sk);
-        // then we need out p_pub = msk * P \in G_1
-        // let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
+        let p_pub = E::PublicKeyGroup::generator() * sk;
+        // let msk = SecretKey::<E>(sk);
+        let msk = SecretKey::<E>(E::Scalar::rand(&mut OsRng));
         // e.g. s_1 * Q, s_2 * Q, ..., s_n * Q where Q = H_1(identity string)
         let threshold_signatures = (0..m).map(|i| id.extract::<E>(shares[i as usize].1))
             .collect();
-        match msk.encrypt(&message, id, &mut OsRng) {
+        match msk.encrypt(p_pub, &message, id, &mut OsRng) {
             Ok(mut ct) => {
 
                 // create error scenarios here
@@ -275,6 +273,20 @@ mod test {
                 panic!("The test should pass but failed to run tlock encrypt");
             }
         }
+    }
+
+    #[test]
+    pub fn tlock_can_encrypt_decrypt_with_single_sig() {
+        tlock_test::<TinyBLS377, OsRng>(1, 1, 1, false, false,
+            &|status: TestStatusReport| {
+                match status {
+                    TestStatusReport::DecryptSuccess{ actual, expected } => {
+                        assert_eq!(actual, expected);
+                    },
+                    _ => panic!("all other conditions invalid"),
+                }
+            }
+        );
     }
 
     #[test]
