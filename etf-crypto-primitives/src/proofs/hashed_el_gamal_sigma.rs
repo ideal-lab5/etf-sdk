@@ -183,7 +183,7 @@ fn process_batch_data<C: CurveGroup, R: Sized + Rng>(
 
     for m in messages {
         let mut message_bytes = Vec::with_capacity(SERIALIZED_SCALAR_BUFFER_SIZE);
-        let _ = m.serialize_compressed(&mut message_bytes)
+        m.serialize_compressed(&mut message_bytes)
             .map_err(|_| Error::InvalidBufferAllocation)?;
         let ciphertext: Ciphertext<C> = HashedElGamal::encrypt(
             message_bytes
