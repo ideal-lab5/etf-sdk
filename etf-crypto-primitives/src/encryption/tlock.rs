@@ -52,8 +52,6 @@ pub struct DecryptionResult {
 // #[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
 #[derive(Debug)]
 pub struct TLECiphertext<E: EngineBLS> {
-    /// the identity for which the ciphertext was encrypted
-    pub identity: Identity,
     pub aes_ct: AESOutput,
     pub etf_ct: IBECiphertext<E>
 }
@@ -106,8 +104,7 @@ impl<E: EngineBLS> SecretKey<E> {
         // let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
         let b: [u8;32] = convert_to_bytes::<E::Scalar, 32>(msk);
         let ct: IBECiphertext<E> = id.encrypt(&b, p_pub, &mut rng);
-        Ok(TLECiphertext { 
-            identity: id, 
+        Ok(TLECiphertext {
             aes_ct: ct_aes, 
             etf_ct: ct
         })
