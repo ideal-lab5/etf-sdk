@@ -1,83 +1,94 @@
-use ark_bls12_381::{
-    Bls12_381, G1Projective as G1, G2Projective as G2, 
-};
+
+/*
+ * Copyright 2024 by Ideal Labs, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+use ark_ff::UniformRand;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_ec::pairing::Pairing;
+use ark_ec::Group;
 use ark_std::{
     ops::Mul,
     rand::Rng,
-    borrow::ToOwned,
 };
 use ark_std::vec::Vec;
-use crate::utils::{h2, h3, h4};
+use crate::utils::{h2, h3_new, h4, cross_product_32};
 
-/// a ciphertext (U, V, W)
-/// Q: can I find a best way to aggregate the ciphertexts? 
-/// that would be ideal, then we don't need a giant 
-/// vec of these
-#[derive(CanonicalDeserialize, CanonicalSerialize)]
-pub struct IbeCiphertext {
-    pub u: G2,
+use w3f_bls::{EngineBLS, Message};
+
+/// represents a ciphertext in the BF-IBE FullIdent scheme
+#[derive(Debug, Clone, PartialEq, CanonicalDeserialize, CanonicalSerialize)]
+pub struct IBECiphertext<E: EngineBLS> {
+    /// U = rP
+    pub u: E::PublicKeyGroup,
+    /// V = sigma (+) H_2(g_id^r)
     pub v: Vec<u8>,
+    /// W = message (+) H_4(sigma)
     pub w: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IbeError {
     DecryptionFailed,
 }
 
-pub trait Ibe {
+/// A type to represent an IBE identity (for which we will encrypt message)
+#[derive(Debug, Clone)]
+pub struct Identity(pub Message);
 
-    fn encrypt<R: Rng + Sized>(
-        ibe_pp: G2, 
-        p_pub: G2,
-        message: &[u8;32], 
-        // identity: &[u8], 
-        q: G1,
-        rng: R
-    ) -> IbeCiphertext;
+impl Identity {
 
-    fn decrypt(ibe_pp: G2, ciphertext: IbeCiphertext, sk: G1) -> Result<Vec<u8>, IbeError>;
-}
+    /// construct a new identity from a string
+    pub fn new(identity: &[u8]) -> Self {
+        Self(Message::new(b"", identity))
+    }
 
-/// a struct to hold IBE public params
-#[derive(
-    Debug, Clone, 
-    CanonicalDeserialize, CanonicalSerialize,
-)]
-pub struct BfIbe;
+    /// the IBE extract function on a given secret key
+    /// this is essentially a BLS signature
+    pub fn extract<E: EngineBLS>(&self, sk: E::Scalar) -> IBESecret<E> {
+        IBESecret(self.public::<E>() * sk)
+    }
 
-/// the IBE implementation
-/// based on the BF-IBE except using bilinear map from G1 * G2 -> G2
-///
-impl Ibe for BfIbe {
+    /// derive the public key for this identity (hash to G1)
+    pub fn public<E: EngineBLS>(&self) -> E::SignatureGroup {
+        self.0.hash_to_signature_curve::<E>()
+    }
 
-    /// encrypt the message for the given identity
+    /// BF-IBE encryption 
+    /// For a message with 32-bytes and a public key (in G2), calculates the BF-IBE ciphertext
     ///
-    /// * `message`: The message to encrypt
-    /// * `identity`: The identity for which the message will be encrypted
-    /// * `rng`: A random number generator
+    /// C = <U, V, W> = <rP, sigma (+) H_2(g_{ID}^r, message (+) H_4(sigma))>
+    /// where r is randomly selected from the finite field (Z_p) and g_{ID} = e(Q_ID, P_pub)
     ///
-    fn encrypt<R: Rng + Sized>(
-        ibe_pp: G2,
-        p_pub: G2,
+    pub fn encrypt<E, R>(
+        &self,
         message: &[u8;32],
-        q: G1,
-        mut rng: R,
-    ) -> IbeCiphertext {
-        // random sigma in {0, 1}^32
-        let t: Vec<u8> = (0..32).map(|_| rng.next_u32() as u8).collect();
-        let sigma = h4(&t);
+        p_pub: E::PublicKeyGroup,
+        mut rng: R
+    ) -> IBECiphertext<E> 
+    where E: EngineBLS, R: Rng + Sized {
+        let t = E::Scalar::rand(&mut rng);
+        let mut t_bytes = Vec::new();
+        t.serialize_compressed(&mut t_bytes)
+            .expect("compressed size has been allocated");
+        let sigma = h4(&t_bytes);
         // r= H3(sigma, message)
-        let r = h3(&sigma, message);
-        // U = rP
-        let u: G2 = ibe_pp.mul(r); // U = rP
-    
-        // calc identity point
-        // let q = hash_to_g1(identity);
-        // e(Q_id, P_pub)
-        let g_id = Bls12_381::pairing(q, p_pub).mul(r);
+        let r: E::Scalar = h3_new::<E>(&sigma, message);
+        let p = <<E as EngineBLS>::PublicKeyGroup as Group>::generator();
+        // U = rP \in \mathbb{G}_1
+        let u = p * r; 
+        // e(P_pub, Q_id)
+        let g_id = E::pairing(p_pub.mul(r), self.public::<E>());
         // sigma (+) H2(e(Q_id, P_pub))
         let v_rhs = h2(g_id);
         let v_out = cross_product_32(&sigma, &v_rhs);
@@ -85,79 +96,165 @@ impl Ibe for BfIbe {
         let w_rhs = h4(&sigma);
         let w_out = cross_product_32(message, &w_rhs);
         // (rP, sigma (+) H2(e(Q_id, P_pub)), message (+) H4(sigma))
-        IbeCiphertext {
+        IBECiphertext::<E> {
             u,
             v: v_out.to_vec(), 
             w: w_out.to_vec(),
         }
     }
 
-    /// decrypts a message using the provided key
-    /// * `ciphertext`: The ciphertext to decrypt
-    /// * `sk`: The appropriate identity's secret key
-    ///
-    fn decrypt(
-        ibe_pp: G2,
-        ciphertext: IbeCiphertext,
-        sk: G1,
+}
+
+/// The output of the IBE extract algorithm is a BLS signature
+pub struct IBESecret<E: EngineBLS>(pub E::SignatureGroup);
+
+impl<E: EngineBLS> IBESecret<E> {
+    /// BF-IBE decryption of a ciphertext C = <U, V, W>  
+    /// Attempts to decrypt under the given IBESecret (in G1)
+    pub fn decrypt(
+        &self, 
+        ciphertext: &IBECiphertext<E>,
     ) -> Result<Vec<u8>, IbeError> {
         // sigma = V (+) H2(e(d_id, U))
-        let sigma_rhs = h2(Bls12_381::pairing(sk, ciphertext.u));
+        let sigma_rhs = h2(E::pairing(ciphertext.u, self.0));
         let sigma = cross_product_32(&ciphertext.v, &sigma_rhs);
-
         // m = W (+) H4(sigma)
         let m_rhs = h4(&sigma);
         let m = cross_product_32(&ciphertext.w, &m_rhs);
-
-        // check: U =? rP
-        let r = h3(&sigma, &m);
-        let u_check = ibe_pp.mul(r);
+        // check: U == rP
+        let p = <<E as EngineBLS>::PublicKeyGroup as Group>::generator();
+        let r = h3_new::<E>(&sigma, &m);
+        let u_check = p * r;
         if !u_check.eq(&ciphertext.u) {
             return Err(IbeError::DecryptionFailed);
         }
 
         Ok(m)
     }
-
-}
-
-// TODO: can do this in place instead
-fn cross_product_32(a: &[u8], b: &[u8]) -> Vec<u8> {
-    let mut o = a.to_owned();
-    for (i, ri) in o.iter_mut().enumerate().take(32) {
-        *ri ^= b[i];
-    }
-    o.to_vec()
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::utils::hash_to_g1;
-    use ark_bls12_381::Fr;
-    use ark_std::{test_rng, UniformRand, rand::RngCore};
+    
+    use w3f_bls::TinyBLS377;
+    use ark_std::{test_rng, UniformRand};
+
+    // this enum represents the conditions or branches that I want to test
+    enum TestStatusReport {
+        DecryptionResult { data: Vec<u8>, verify: Vec<u8> },
+        DecryptionFailure{ error: IbeError }
+    }
+
+    fn run_test<EB: EngineBLS>(
+        identity: Identity,
+        message: [u8;32],
+        derive_bad_sk: bool,
+        insert_bad_ciphertext: bool,
+        handler: &dyn Fn(TestStatusReport) -> ()
+    ) {
+        let (msk, sk) = extract::<EB>(identity.clone(), derive_bad_sk);
+
+        let p_pub = <<EB as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
+
+        let mut ct = IBECiphertext {
+            u: EB::PublicKeyGroup::generator(),
+            v: vec![],
+            w: vec![],
+        };
+
+        if !insert_bad_ciphertext {
+            ct = identity.encrypt(&message, p_pub, &mut test_rng());
+        }
+
+        match sk.decrypt(&ct) {
+            Ok(data) => {
+                handler(TestStatusReport::DecryptionResult{ data, verify: message.to_vec() });
+            },
+            Err(e) => {
+                handler(TestStatusReport::DecryptionFailure{ error: e });
+            }
+        }
+    }
+
+    fn extract<E: EngineBLS>(
+        identity: Identity,
+        derive_bad_sk: bool,
+    ) -> (E::Scalar, IBESecret<E>) {
+        let msk = <E as EngineBLS>::Scalar::rand(&mut test_rng());
+        if derive_bad_sk {
+            return (msk, IBESecret(E::SignatureGroup::generator()))
+        }
+
+        let sk = identity.extract::<E>(msk);
+        (msk, sk)
+    }
 
     #[test]
-    pub fn can_encrypt_and_decrypt() {
-        // setup
+    pub fn fullident_identity_construction_works() {
         let id_string = b"example@test.com";
-        let q = hash_to_g1(id_string);
-        // a dummy message
+        let identity = Identity::new(id_string);
+        
+        let expected_message = Message::new(b"", id_string);
+        assert_eq!(identity.0, expected_message);
+    }
+
+    #[test]
+    pub fn fullident_encrypt_and_decrypt() {
+        let id_string = b"example@test.com";
+        let identity = Identity::new(id_string);
         let message: [u8;32] = [2;32];
-        // every participant knows the msk...
-        // could be replaced by an MPC protocol
-        let msk = Fr::from(test_rng().next_u64());
-        // a random element of G1, the IBE public parameter
-        let ibe_pp = G2::rand(&mut test_rng());
-        let p_pub = ibe_pp.mul(msk);
 
-        let ct = BfIbe::encrypt(ibe_pp, p_pub, &message, q.into(), &mut test_rng());
-        // then calculate our own secret
-        let d = hash_to_g1(id_string).mul(msk);
+        run_test::<TinyBLS377>(
+            identity, message, false, false,
+            &|status: TestStatusReport| {
+            match status {
+                TestStatusReport::DecryptionResult{ data, verify } => {
+                    assert_eq!(data, verify);
+                },
+                _ => 
+                    panic!("Decryption should work"),
+            }
+        });
+    }
 
-        let recovered_message = BfIbe::decrypt(ibe_pp, ct, d).unwrap();
-        let message_vec = message.to_vec();
-        assert_eq!(message_vec, recovered_message);
+    #[test]
+    pub fn fullident_decryption_fails_with_bad_ciphertext() {
+        let id_string = b"example@test.com";
+        let identity = Identity::new(id_string);
+        let message: [u8;32] = [2;32];
+
+        run_test::<TinyBLS377>(
+            identity,
+            message, 
+            false,
+            true,
+            &|status: TestStatusReport| {
+            match status {
+                TestStatusReport::DecryptionFailure{ error } => {
+                    assert_eq!(error, IbeError::DecryptionFailed);
+                },
+                _ => panic!("all other conditions invalid"),
+            }
+        });
+    }
+
+    #[test]
+    pub fn fullident_decryption_fails_with_bad_key() {
+        let id_string = b"example@test.com";
+        let identity = Identity::new(id_string);
+        let message: [u8;32] = [2;32];
+
+        run_test::<TinyBLS377>(
+            identity, message, true, false,
+            &|status: TestStatusReport| {
+            match status {
+                TestStatusReport::DecryptionFailure{ error } => {
+                    assert_eq!(error, IbeError::DecryptionFailed);
+                },
+                _ => panic!("all other conditions invalid"),
+            }
+        });
     }
 
 }

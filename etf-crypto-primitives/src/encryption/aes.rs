@@ -1,16 +1,26 @@
+/*
+ * Copyright 2024 by Ideal Labs, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
 use aes_gcm::{
     aead::{Aead, AeadCore, AeadInPlace, KeyInit},
-    Aes256Gcm, Nonce, // Or `Aes128Gcm`
+    Aes256Gcm, Nonce,
 };
 use ark_std::rand::Rng;
-use ark_bls12_381::Fr;
-use ark_ff::{Zero, One, Field, UniformRand};
-use ark_poly::{
-    polynomial::univariate::DensePolynomial,
-    DenseUVPolynomial, Polynomial,
-};
+
 use serde::{Deserialize, Serialize};
-// use alloc::vec::Vec;
 
 use ark_std::rand::CryptoRng;
 use ark_std::vec::Vec;
@@ -26,9 +36,11 @@ pub struct AESOutput {
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    CiphertextTooLarge,
     EncryptionError,
     DecryptionError,
     InvalidKey,
+    BadNonce,
 }
 
 /// AES-GCM encryption of the message using an ephemeral keypair
@@ -49,7 +61,7 @@ pub fn encrypt<R: Rng + CryptoRng + Sized>(
     // Encrypt `buffer` in-place, replacing the plaintext contents with ciphertext
     // will this error ever be thrown here? nonces should always be valid as well as buffer
     cipher.encrypt_in_place(&nonce, b"", &mut buffer)
-        .map_err(|_| Error::EncryptionError)?;
+        .map_err(|_| Error::CiphertextTooLarge)?;
     Ok(AESOutput{
         ciphertext: buffer,
         nonce: nonce.to_vec(),
@@ -64,72 +76,20 @@ pub fn encrypt<R: Rng + CryptoRng + Sized>(
 /// * `key`: the key used for encryption
 ///
 pub fn decrypt(
-    ciphertext: Vec<u8>, 
-    nonce_slice: &[u8], 
-    key: &[u8],
+    ct: AESOutput,
 ) -> Result<Vec<u8>, Error> {
-    // not sure about that...
-    let cipher = Aes256Gcm::new_from_slice(key)
+    let cipher = Aes256Gcm::new_from_slice(&ct.key)
         .map_err(|_| Error::InvalidKey)?;
-    let nonce = Nonce::from_slice(nonce_slice);
-    let plaintext = cipher.decrypt(nonce, ciphertext.as_ref())
+    // lets check the nonce... not great way to do it but ok for now
+    // TODO:get a valid nonce size as a constant
+    if ct.nonce.len() != 12 {
+        // panic!("{:?}", ct.nonce.len());
+        return Err(Error::BadNonce);
+    }
+    let nonce = Nonce::from_slice(&ct.nonce);
+    let plaintext = cipher.decrypt(nonce, ct.ciphertext.as_ref())
         .map_err(|_| Error::DecryptionError)?;
     Ok(plaintext)
-}
-
-/// Generate a random polynomial f and return evalulations (f(0), (1, f(1), ..., n, f(n)))
-/// f(0) is the 'secret' and the shares can be used to recover the secret with `let s = interpolate(shares);`
-///
-/// * `n`: The number of shares to generate
-/// * `t`: The degree of the polynomial
-/// * `rng`: A random number generator
-///
-pub fn generate_secrets<R: Rng + Sized>(
-    n: u8, t: u8, mut rng: R) -> (Fr, Vec<(Fr, Fr)>) {
-    
-    if n == 1 {
-        let r = Fr::rand(&mut rng);
-        return (r, vec![(Fr::zero(), r)]);
-    }
-
-    let f = DensePolynomial::<Fr>::rand(t as usize, &mut rng);
-    let msk = f.evaluate(&Fr::zero());
-    let evals: Vec<(Fr, Fr)> = (1..n+1)
-        .map(|i| {
-            let e = Fr::from(i);
-            (e, f.evaluate(&e))
-        }).collect();
-    (msk, evals)
-}
-
-/// interpolate a polynomial from the input and evaluate it at 0
-///
-/// * `evalulation`: a vec of (x, f(x)) pairs
-///
-pub fn interpolate(evaluations: Vec<(Fr, Fr)>) -> Fr {
-    let n = evaluations.len();
-
-    // Calculate the Lagrange basis polynomials evaluated at 0
-    let mut lagrange_at_zero: Vec<Fr> = Vec::with_capacity(n);
-    for i in 0..n {
-        let mut basis_value = Fr::one();
-        for j in 0..n {
-            if i != j {
-                let denominator = evaluations[i].0 - evaluations[j].0;
-                // todo: handle unwrap?
-                basis_value *= denominator.inverse().unwrap() * evaluations[j].0;
-            }
-        }
-        lagrange_at_zero.push(basis_value);
-    }
-
-    // Interpolate the value at 0
-    let mut interpolated_value = Fr::zero();
-    for i in 0..n {
-        interpolated_value += evaluations[i].1 * lagrange_at_zero[i];
-    }
-
-    interpolated_value
 }
 
 #[cfg(test)]
@@ -144,7 +104,7 @@ mod test {
         let rng = ChaCha20Rng::from_seed([2;32]);
         match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match decrypt(aes_out.ciphertext, &aes_out.nonce, &aes_out.key) {
+                match decrypt(aes_out) {
                     Ok(plaintext) => {
                         assert_eq!(msg.to_vec(), plaintext);
                     }, 
@@ -165,7 +125,12 @@ mod test {
         let rng = ChaCha20Rng::from_seed([1;32]);
         match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match decrypt(aes_out.ciphertext, &aes_out.nonce, &b"hi".to_vec()) {
+                let bad = AESOutput {
+                    ciphertext: aes_out.ciphertext,
+                    nonce: aes_out.nonce, 
+                    key: b"hi".to_vec(),
+                };
+                match decrypt(bad) {
                     Ok(_) => {
                         panic!("should be an error");
                     }, 
@@ -181,12 +146,17 @@ mod test {
     }
      
     #[test]
-    pub fn aes_encrypt_decrypt_fails_with_bad_nonce() {
+    pub fn aes_encrypt_decrypt_fails_with_invalid_nonce() {
         let msg = b"test";
         let rng = ChaCha20Rng::from_seed([3;32]);
         match encrypt(msg, [2;32], rng) {
             Ok(aes_out) => {
-                match decrypt(aes_out.ciphertext, &vec![0,0,0,0,0,0,0,0,0,0,0,0], &aes_out.key) {
+                let bad = AESOutput {
+                    ciphertext: aes_out.ciphertext,
+                    nonce: vec![0,0,0,0,0,0,0,0,0,0,0,0], 
+                    key: aes_out.key,
+                };
+                match decrypt(bad) {
                     Ok(_) => {
                         panic!("should be an error");
                     }, 
@@ -202,14 +172,28 @@ mod test {
     }
 
     #[test]
-    fn secrets_interpolation() {
-        let n = 5; // Number of participants
-        let t = 3; // Threshold
-        let rng = ChaCha20Rng::from_seed([4;32]);
-        let (msk, shares) = generate_secrets(n, t, rng);
-        // Perform Lagrange interpolation
-        let interpolated_msk = interpolate(shares);
-        // Check if the msk and the interpolated msk match
-        assert_eq!(msk, interpolated_msk);
+    pub fn aes_encrypt_decrypt_fails_with_bad_length_nonce() {
+        let msg = b"test";
+        let rng = ChaCha20Rng::from_seed([3;32]);
+        match encrypt(msg, [2;32], rng) {
+            Ok(aes_out) => {
+                let bad = AESOutput {
+                    ciphertext: aes_out.ciphertext,
+                    nonce: vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+                    key: aes_out.key,
+                };
+                match decrypt(bad) {
+                    Ok(_) => {
+                        panic!("should be an error");
+                    }, 
+                    Err(e) => {
+                        assert_eq!(e, Error::BadNonce);
+                    }
+                }
+            },
+            Err(_) => {
+                panic!("test should pass");
+            }
+        }
     }
 }

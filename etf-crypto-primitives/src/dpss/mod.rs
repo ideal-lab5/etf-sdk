@@ -13,5 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+pub mod acss;
 
-pub mod fullident;
+pub use acss::DoubleSecret as DoubleSecret;
+pub use acss::Keypair as Keypair;
