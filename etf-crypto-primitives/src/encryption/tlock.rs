@@ -27,6 +27,7 @@ use ark_poly::{
 };
 
 use ark_serialize::CanonicalDeserialize;
+use ark_serialize::CanonicalSerialize;
 use serde::{Deserialize, Serialize};
 
 use ark_std::{
@@ -39,6 +40,17 @@ use w3f_bls::EngineBLS;
 /// a secret key used for encryption/decryption
 pub type OpaqueSecretKey = Vec<u8>;
 
+// A struct to get around the size limitations of Serde array bindings
+//https://github.com/serde-rs/serde/issues/631 solution given by dtolnay
+// Can probably remove and replace with BigArray from serde-big-array crate
+#[derive(Serialize, CanonicalSerialize, CanonicalDeserialize, Debug)]
+pub struct SerdeNArray <const N: usize> {
+
+    #[serde(serialize_with = "<[_]>::serialize")]
+    pub arr: [u8;N]
+
+}
+
 /// the result of successful decryption of a timelocked ciphertext
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DecryptionResult {
@@ -49,8 +61,8 @@ pub struct DecryptionResult {
 }
 
 // #[derive(Serialize, Deserialize, Debug)]
-// #[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
-#[derive(Debug)]
+#[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
+// #[derive(Debug)]
 pub struct TLECiphertext<E: EngineBLS> {
     pub aes_ct: AESOutput,
     pub etf_ct: IBECiphertext<E>

@@ -22,6 +22,7 @@ use ark_std::{
     rand::Rng,
 };
 use ark_std::vec::Vec;
+use serde::{Deserialize, Serialize};
 use crate::utils::{h2, h3_new, h4, cross_product_32};
 
 use w3f_bls::{EngineBLS, Message};

@@ -7,7 +7,7 @@
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "as-bind": "^0.8.2",
-    "etf": "file:../../api/pkg",
+    "etf": "file:../../etf-sdk/pkg",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
