@@ -184,20 +184,18 @@ pub fn encrypt(
     //THIS PANICS!!!!!!
     log("pp_convert size");
     log(&pp_convert.len().to_string());
-    let pp = convert_from_bytes::<DoublePublicKey<TinyBLS377>, 144>(&pp_convert.clone()).unwrap();
+    let double_pub = convert_from_bytes::<DoublePublicKey<TinyBLS377>, 144>(&pp_convert.clone()).unwrap();
 
+    let pp = double_pub.1;
     let id_convert: Vec<u8> = serde_wasm_bindgen::from_value(id.clone())
         .map_err(|_| JsError::new("could not decode id"))?;
     let identity = Identity::new(&id_convert);
     let secret_key = SecretKey::<TinyBLS377>(msk);
     // //DONT LET THIS PANIC
-    // let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, &mut rng).unwrap();
-    // let mut cyphertext_bytes: Vec<_> = Vec::new();
-    // cyphertext.serialize_compressed(&mut cyphertext_bytes).unwrap();
-    // cyphertext.serialize_compressed(&mut cyphertext_bytes).unwrap().map_err(|_| JsError::new("failed to compress cyphertext"));
-    // let temp_message = "this is a placeholder";
-    // serde_wasm_bindgen::to_value(&cyphertext_bytes).map_err(|_| JsError::new("could not convert to JsValue"))
-    serde_wasm_bindgen::to_value(&temp_holder).map_err(|_| JsError::new("could not convert to JsValue"))
+    let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, &mut rng).unwrap();
+    let mut ciphertext_bytes: Vec<_> = Vec::new();
+    ciphertext.serialize_compressed(&mut ciphertext_bytes).unwrap();
+    serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert to JsValue"))
    
 
 }
