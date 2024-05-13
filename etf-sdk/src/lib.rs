@@ -110,10 +110,15 @@ pub struct KeyChain {
 
 #[wasm_bindgen]
 pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
-    println!("GENERATE KEYSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS");
-    let seed_vec: Vec<u8> = serde_wasm_bindgen::from_value(seed.clone())
-        .map_err(|_| JsError::new("could not convert seed to vec"))?;
-    let seed_hash : [u8;32]= utils::sha256(&seed_vec).try_into().unwrap();
+    log("%%%%%%%%%%%%% generate keys log %%%%%%%%%%%%%");
+    log("seed: ");
+    let seed_string: String = serde_wasm_bindgen::from_value(seed).unwrap();
+    let seed_vec = seed_string.as_bytes();
+    log("seed_vec size: ");
+    log(&seed_vec.len().to_string());
+    let seed_hash : [u8;32]= utils::sha256(seed_vec).try_into().unwrap();
+    log("seed_hash size: ");
+    log(&seed_hash.len().to_string());
     let mut rng: ChaCha20Rng = ChaCha20Rng::from_seed(seed_hash);
     let mut keypair = w3f_bls::KeypairVT::<TinyBLS377>::generate(&mut rng);
     let sk_gen: <TinyBLS377 as EngineBLS>::Scalar = keypair.secret.0;
@@ -123,6 +128,8 @@ pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
     );
     let mut sk_bytes = Vec::new();
     sk_gen.serialize_compressed(&mut sk_bytes).unwrap();
+    log("sk_bytes size: ");
+    log(&sk_bytes.len().to_string());
     let mut double_public_bytes = Vec::new();
     double_public.serialize_compressed(&mut double_public_bytes).unwrap();
     let kc = KeyChain{double_public: double_public_bytes.try_into().unwrap(), sk: sk_bytes.try_into().unwrap()};
@@ -153,6 +160,7 @@ pub fn encrypt(
     let mut pp_from_js: Vec<u8> = serde_wasm_bindgen::from_value(p_pub.clone())
         .map_err(|_| JsError::new("could not decode p_pub"))?;
     assert!(pp_from_js.len() == 144, "NO");
+    log("pp_from_js made");
  
     // //DONT LET THIS PANIC
     // let pp_convert: &[u8;96] = &pp_from_js;
@@ -162,25 +170,28 @@ pub fn encrypt(
     error_string.push_str("but it was ");
     // error_string.push_str(&pp_from_js.len().to_string());
     error_string.push_str(&pp_from_js.len().to_string());
-
-    let pp_convert: [u8;96] = pp_from_js.try_into().map_err(|_| JsError::new(&error_string))?;
+    let pp_convert: [u8;144] = pp_from_js.try_into().map_err(|_| JsError::new(&error_string))?;
+    log("pp_convert created");
 
     //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     // const test_array: [u8;96] = [0;96];
     // const test_array_size: usize = test_array.len();
-    let temp_holder: SerdeNArray<96> = SerdeNArray{arr: pp_convert};
+    let temp_holder: SerdeNArray<144> = SerdeNArray{arr: pp_convert};
+    log("temp holder created");
     //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     // //DONT LET THIS PANIC
     //THIS PANICS!!!!!!
-    let pp = convert_from_bytes::<<TinyBLS377 as EngineBLS>::PublicKeyGroup, 96>(&pp_convert.clone()).unwrap();
+    log("pp_convert size");
+    log(&pp_convert.len().to_string());
+    let pp = convert_from_bytes::<DoublePublicKey<TinyBLS377>, 144>(&pp_convert.clone()).unwrap();
 
     let id_convert: Vec<u8> = serde_wasm_bindgen::from_value(id.clone())
         .map_err(|_| JsError::new("could not decode id"))?;
     let identity = Identity::new(&id_convert);
     let secret_key = SecretKey::<TinyBLS377>(msk);
     // //DONT LET THIS PANIC
-    let cyphertext = secret_key.encrypt(pp, &message_bytes, identity, &mut rng).unwrap();
+    // let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, &mut rng).unwrap();
     // let mut cyphertext_bytes: Vec<_> = Vec::new();
     // cyphertext.serialize_compressed(&mut cyphertext_bytes).unwrap();
     // cyphertext.serialize_compressed(&mut cyphertext_bytes).unwrap().map_err(|_| JsError::new("failed to compress cyphertext"));
@@ -264,6 +275,12 @@ pub fn encrypt(
 //         .map_err(|_| JsError::new("could not convert secrets to JsValue"))
 // }
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -288,20 +305,25 @@ mod test {
         // p_pub: DoublePublicKey<E>,
         handler: &dyn Fn(TestStatusReport) -> ()
     ){
-        let seed = serde_wasm_bindgen::to_value("seeeeeeed").unwrap();
+
+        let seed_string = "seeeeeeed";
+       
+        let seed = serde_wasm_bindgen::to_value(seed_string).unwrap();
         let keys_js = generate_keys(seed).ok().unwrap();
+        log("key generation complete");
         // let key_chain = serde_wasm_bindgen::from_value(keys_js);
-        let identity_js = serde_wasm_bindgen::to_value(&identity).unwrap();
-        let message_js = serde_wasm_bindgen::to_value(&message).unwrap();
+        let identity_js: JsValue = serde_wasm_bindgen::to_value(&identity).unwrap();
+        let message_js: JsValue = serde_wasm_bindgen::to_value(&message).unwrap();
         let key_chain: KeyChain = serde_wasm_bindgen::from_value(keys_js).unwrap();
-        let sk = key_chain.sk;
-        let p_pub = key_chain.double_public;
-        let mut sk_bytes = Vec::new();
+        let sk: [u8; 32] = key_chain.sk;
+        let p_pub: [u8; 144] = key_chain.double_public;
+        let mut sk_bytes: Vec<u8> = Vec::new();
         sk.serialize_compressed(&mut sk_bytes).unwrap();
-        let sk_js = serde_wasm_bindgen::to_value(&sk_bytes).unwrap();
-        let mut p_pub_bytes = Vec::new();
+        let sk_js: JsValue = serde_wasm_bindgen::to_value(&sk_bytes).unwrap();
+        let mut p_pub_bytes: Vec<u8> = Vec::new();
         p_pub.serialize_compressed(&mut p_pub_bytes).unwrap();
-        let p_pub_js = serde_wasm_bindgen::to_value(&p_pub_bytes).unwrap();
+        let p_pub_js: JsValue = serde_wasm_bindgen::to_value(&p_pub_bytes).unwrap();
+        log("calling encrypt");
         match encrypt(identity_js, message_js, sk_js, p_pub_js){
             Ok(ciphertext) => {
                 handler(TestStatusReport::EncryptSuccess{

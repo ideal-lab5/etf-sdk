@@ -28,7 +28,7 @@ use crate::utils::{h2, h3_new, h4, cross_product_32};
 use w3f_bls::{EngineBLS, Message};
 
 /// represents a ciphertext in the BF-IBE FullIdent scheme
-#[derive(Debug, Clone, PartialEq, CanonicalDeserialize, CanonicalSerialize)]
+#[derive(Debug, Clone, PartialEq, CanonicalDeserialize, CanonicalSerialize, Serialize, Deserialize)]
 pub struct IBECiphertext<E: EngineBLS> {
     /// U = rP
     pub u: E::PublicKeyGroup,
