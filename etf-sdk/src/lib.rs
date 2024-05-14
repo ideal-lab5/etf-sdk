@@ -1,9 +1,10 @@
-use ark_serialize::CanonicalSerialize;
+use ark_ec::bls12::Bls12;
+use ark_serialize::{CanonicalSerialize, Read};
 use serde::Deserialize;
 #[cfg_attr(tarpaulin, skip)]
 use wasm_bindgen::prelude::*;
-use etf_crypto_primitives::{self, encryption::tlock::SecretKey, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
-use w3f_bls::{EngineBLS, TinyBLS377};
+use etf_crypto_primitives::{self, encryption::tlock::{SecretKey, TLECiphertext}, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
+use w3f_bls::{EngineBLS, TinyBLS, TinyBLS377, BLS377};
 use rand_chacha::ChaCha20Rng;
 use ark_std::rand::SeedableRng;
 use w3f_bls::{
@@ -173,6 +174,7 @@ pub fn encrypt(
     let secret_key = SecretKey::<TinyBLS377>(msk);
     // //DONT LET THIS PANIC
     let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, &mut rng).unwrap();
+    print_type_of(&ciphertext);
     let mut ciphertext_bytes: Vec<_> = Vec::new();
     ciphertext.serialize_compressed(&mut ciphertext_bytes).unwrap();
     serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert to JsValue"))
@@ -180,14 +182,46 @@ pub fn encrypt(
 
 }
 
+    pub fn print_type_of<T>(_: &T) {
+        log("TYPE OF: ");
+        log(std::any::type_name::<T>());
+    }
+
     #[wasm_bindgen]
     pub fn decrypt(
         ciphertext_js: JsValue,
-        sks_js: JsValue
+        id: JsValue,
+        sk_js: JsValue
     ) -> Result<JsValue, JsError>{
         log("decrypt");
-        // let ciphertext = serde_wasm_bindgen::from_value(ciphertext_js).unwrap();
-        let ibe_secret = IBESecret::<TinyBLS377>;
+
+        let msk_bytes: [u8;32] = serde_wasm_bindgen::from_value(sk_js.clone())
+            .map_err(|_| JsError::new("could not decode secret key"))?;
+        let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&msk_bytes.clone()).unwrap();
+        // let secret_key = SecretKey::<TinyBLS377>(msk);
+
+        let ciphertext_vec: Vec<u8> = serde_wasm_bindgen::from_value(ciphertext_js.clone())
+            .map_err(|_| JsError::new("could not decode ciphertext"))?;
+        let ciphertext_bytes: &[u8] = ciphertext_vec.as_slice();
+        let ciphertext: TLECiphertext<TinyBLS377> = TLECiphertext::deserialize_compressed(ciphertext_bytes).unwrap();
+
+        let id_convert: Vec<u8> = serde_wasm_bindgen::from_value(id.clone())
+        .map_err(|_| JsError::new("could not decode id"))?;
+        let identity = Identity::new(&id_convert);
+
+        let sig: IBESecret<TinyBLS377> = identity.extract(msk);
+        let mut sig_vec = Vec::new();
+        sig_vec.push(sig);
+
+        let decrypt_result = ciphertext.decrypt(sig_vec).unwrap();
+        let message = decrypt_result.message;
+        let plaintext = String::from_utf8(message).unwrap();
+    
+
+        log("plaintext: ");
+        log(&plaintext);
+
+
         let placeholder = "abc";
 
         serde_wasm_bindgen::to_value(placeholder).map_err(|_| JsError::new("could not do that"))
@@ -298,7 +332,6 @@ mod test {
         let seed = serde_wasm_bindgen::to_value(seed_string).unwrap();
         let keys_js = generate_keys(seed).ok().unwrap();
         log("key generation complete");
-        // let key_chain = serde_wasm_bindgen::from_value(keys_js);
         let identity_js: JsValue = serde_wasm_bindgen::to_value(&identity).unwrap();
         let message_js: JsValue = serde_wasm_bindgen::to_value(&message).unwrap();
         let key_chain: KeyChain = serde_wasm_bindgen::from_value(keys_js).unwrap();
@@ -311,8 +344,9 @@ mod test {
         p_pub.serialize_compressed(&mut p_pub_bytes).unwrap();
         let p_pub_js: JsValue = serde_wasm_bindgen::to_value(&p_pub_bytes).unwrap(); 
         log("calling encrypt");
-        match encrypt(identity_js, message_js, sk_js, p_pub_js){
+        match encrypt(identity_js.clone(), message_js, sk_js.clone(), p_pub_js){
             Ok(ciphertext) => {
+                decrypt(ciphertext.clone(), identity_js, sk_js);
                 handler(TestStatusReport::EncryptSuccess{
                     ciphertext
                 })
@@ -328,7 +362,7 @@ mod test {
     #[wasm_bindgen_test]
     pub fn can_encrypt() {
         let message = b"this is a test message".to_vec();
-        let id = b"testing purposes".to_vec();
+        let id: Vec<u8> = b"testing purposes".to_vec();
         setup_test::<TinyBLS377>(id, message, &|status: TestStatusReport| {
             match status {
                 TestStatusReport::EncryptSuccess { ciphertext } => {
