@@ -1,10 +1,9 @@
-use ark_ec::bls12::Bls12;
-use ark_serialize::{CanonicalSerialize, Read};
+use ark_serialize::CanonicalSerialize;
 use serde::Deserialize;
 #[cfg_attr(tarpaulin, skip)]
 use wasm_bindgen::prelude::*;
 use etf_crypto_primitives::{self, encryption::tlock::{SecretKey, TLECiphertext}, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
-use w3f_bls::{EngineBLS, TinyBLS, TinyBLS377, BLS377};
+use w3f_bls::{EngineBLS, TinyBLS377};
 use rand_chacha::ChaCha20Rng;
 use ark_std::rand::SeedableRng;
 use w3f_bls::{
@@ -14,89 +13,6 @@ use w3f_bls::{
 use serde::Serialize;
 use serde_big_array::BigArray;
 use ark_serialize::CanonicalDeserialize;
-
-// use ark_bls12_381::{Fr, G1Affine as G1, G2Affine as G2};
-// use ark_ec::AffineRepr;
-// use etf_crypto_primitives::{
-//     ibe::fullident::BfIbe,
-//     proofs::verifier::IbeDleqVerifier,
-//     encryption::tlock::DefaultTlock,
-//     utils::{convert_to_bytes, hash_to_g1},
-// };
-// use etf_crypto_primitives::{
-    
-//     utils::{convert_to_bytes, hash_to_g1},
-// };
-// use serde::{Deserialize, Serialize};
-
-// use crate::api::{
-//     EtfApi, DefaultApi,
-// };
-
-// pub mod api;
-
-// pub enum ApiError {
-//     EncryptionError("you messed up"),
-//     WasmBindError,
-// }
-
-// // TODO: enhance error types (using thiserror?)
-
-// /// a wrapper around the DefaultTlock so that it can be compiled to wasm
-// #[wasm_bindgen]
-// pub struct EtfApiWrapper {    
-//     pps: (JsValue, JsValue),
-// }
-
-// #[wasm_bindgen]
-// impl EtfApiWrapper {
-
-//     /// p and q are the IBE parameters, both elements of G2
-//     #[wasm_bindgen(constructor)]
-//     pub fn create(p: JsValue, q: JsValue) -> Self {
-//         // TODO: verification
-//         Self { pps: (p, q) }
-//     }
-
-//     #[wasm_bindgen]
-//     pub fn version(&self) -> JsValue {
-//         serde_wasm_bindgen::to_value(b"v0.0.3-dev").unwrap()
-//     }
-
-//     /// a wrapper function around the DefaultApi 'encrypt' implementation
-//     /// returns a ciphertext blob containing both aes ct and etf ct
-//     ///
-//     ///  
-//     #[wasm_bindgen]
-//     pub fn encrypt(
-//         &self,
-//         message_bytes: JsValue, // &[u8], 
-//         slot_id_bytes: JsValue, // Vec<Vec<u8>>,
-//         t: u8,
-//         seed_bytes: JsValue,
-//     ) -> Result<JsValue, JsError> {
-//         // // convert JsValue to types
-//         // let ibe_pp : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.0.clone())
-//         //     .map_err(|_| JsError::new("could not decode ibe pp"))?;
-//         // let p_pub : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.1.clone())
-//         //     .map_err(|_| JsError::new("could not decode p pub"))?;
-//         // let message : Vec<u8> = serde_wasm_bindgen::from_value(message_bytes)
-//         //     .map_err(|_| JsError::new("could not decode message"))?;
-//         // let slot_ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(slot_id_bytes)
-//         //     .map_err(|_| JsError::new("could not decode slot ids"))?;
-//         // let seed: Vec<u8> = serde_wasm_bindgen::from_value(seed_bytes)
-//         //     .map_err(|_| JsError::new("could not decode seed"))?;
-//         // // TODO: this should probably be an async future... in the future
-//         // let out = 
-//         //     DefaultApi::<IbeDleqVerifier, BfIbe, DefaultTlock<BfIbe>>::encrypt(
-//         //         ibe_pp, p_pub, &message, slot_ids, t, &seed)
-//         //             .map_err(|_| JsError::new("encrypt failed"))?;
-//         let out = "out".to_string();
-//         println!("{}", out);
-//         serde_wasm_bindgen::to_value(&out)
-//             .map_err(|_| JsError::new("could not convert to JsValue"))
-//     }
-//    }
 
 #[derive(Serialize, CanonicalSerialize, CanonicalDeserialize, Deserialize, Debug)]
 pub struct KeyChain {
@@ -109,7 +25,6 @@ pub struct KeyChain {
 #[wasm_bindgen]
 pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
     log("%%%%%%%%%%%%% generate keys log %%%%%%%%%%%%%");
-    log("seed: ");
     let seed_string: String = serde_wasm_bindgen::from_value(seed).unwrap();
     let seed_vec = seed_string.as_bytes();
     log("seed_vec size: ");
@@ -134,49 +49,46 @@ pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
     serde_wasm_bindgen::to_value(&kc).map_err(|_| JsError::new("could not convert secret key to JsValue"))
 }
 
-///take js value, convert into Vec<u8>
-
  #[wasm_bindgen]
 pub fn encrypt( 
-    id: JsValue,
-    message: JsValue, // &[u8]
-    sk: JsValue,
-    p_pub: JsValue
+    id_js: JsValue,
+    message_js: JsValue, // &[u8]
+    sk_js: JsValue,
+    p_pub_js: JsValue
 ) -> Result<JsValue, JsError> {
-    // // msk => master secret key
-    let msk_bytes: [u8;32] = serde_wasm_bindgen::from_value(sk.clone())
+    // msk => master secret key
+    let msk_bytes: [u8;32] = serde_wasm_bindgen::from_value(sk_js.clone())
         .map_err(|_| JsError::new("could not decode secret key"))?;
-    let message_bytes: Vec<u8> = serde_wasm_bindgen::from_value(message.clone())
-        .map_err(|_| JsError::new("could not decode message"))?;
     let mut rng: ChaCha20Rng = ChaCha20Rng::from_seed(msk_bytes);
     // // Look into Options and determine how to handle error
     let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&msk_bytes.clone()).unwrap();
+    let secret_key = SecretKey::<TinyBLS377>(msk);
 
-    let pp_from_js: Vec<u8> = serde_wasm_bindgen::from_value(p_pub.clone())
+    let pp_from_js: Vec<u8> = serde_wasm_bindgen::from_value(p_pub_js.clone())
         .map_err(|_| JsError::new("could not decode p_pub"))?;
     assert!(pp_from_js.len() == 144, "NO");
-    log("pp_from_js made");
- 
     // //DONT LET THIS PANIC
-    let pp_convert: [u8;144] = pp_from_js.try_into().map_err(|_| JsError::new("could not convert public params"))?;
-    log("pp_convert created");
-
+    let pp_bytes: [u8;144] = pp_from_js.try_into().map_err(|_| JsError::new("could not convert public params"))?;
+    log("pp serialized");
     // //DONT LET THIS PANIC
     //THIS PANICS!!!!!!
-    log("pp_convert size");
-    log(&pp_convert.len().to_string());
-    let double_pub = convert_from_bytes::<DoublePublicKey<TinyBLS377>, 144>(&pp_convert.clone()).unwrap();
+    log("pp byte array size");
+    log(&pp_bytes.len().to_string());
+    let double_pub_key = convert_from_bytes::<DoublePublicKey<TinyBLS377>, 144>(&pp_bytes.clone()).unwrap();
+    let pp = double_pub_key.1;
 
-    let pp = double_pub.1;
-    let id_convert: Vec<u8> = serde_wasm_bindgen::from_value(id.clone())
+    let id_bytes: Vec<u8> = serde_wasm_bindgen::from_value(id_js.clone())
         .map_err(|_| JsError::new("could not decode id"))?;
-    let identity = Identity::new(&id_convert);
-    let secret_key = SecretKey::<TinyBLS377>(msk);
+    let identity = Identity::new(&id_bytes);
+
+    let message_bytes: Vec<u8> = serde_wasm_bindgen::from_value(message_js.clone())
+    .map_err(|_| JsError::new("could not decode message"))?;
+
     // //DONT LET THIS PANIC
     let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, &mut rng).unwrap();
-    print_type_of(&ciphertext);
     let mut ciphertext_bytes: Vec<_> = Vec::new();
     ciphertext.serialize_compressed(&mut ciphertext_bytes).unwrap();
+
     serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert to JsValue"))
    
 
@@ -190,116 +102,38 @@ pub fn encrypt(
     #[wasm_bindgen]
     pub fn decrypt(
         ciphertext_js: JsValue,
-        id: JsValue,
+        id_js: JsValue,
         sk_js: JsValue
     ) -> Result<JsValue, JsError>{
         log("decrypt");
 
+        let id_bytes: Vec<u8> = serde_wasm_bindgen::from_value(id_js.clone())
+        .map_err(|_| JsError::new("could not decode id"))?;
+        let identity = Identity::new(&id_bytes);
+
         let msk_bytes: [u8;32] = serde_wasm_bindgen::from_value(sk_js.clone())
             .map_err(|_| JsError::new("could not decode secret key"))?;
         let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&msk_bytes.clone()).unwrap();
-        // let secret_key = SecretKey::<TinyBLS377>(msk);
-
+        let sig: IBESecret<TinyBLS377> = identity.extract(msk);
+        let sig_vec = vec![sig];
+        
         let ciphertext_vec: Vec<u8> = serde_wasm_bindgen::from_value(ciphertext_js.clone())
             .map_err(|_| JsError::new("could not decode ciphertext"))?;
         let ciphertext_bytes: &[u8] = ciphertext_vec.as_slice();
         let ciphertext: TLECiphertext<TinyBLS377> = TLECiphertext::deserialize_compressed(ciphertext_bytes).unwrap();
-
-        let id_convert: Vec<u8> = serde_wasm_bindgen::from_value(id.clone())
-        .map_err(|_| JsError::new("could not decode id"))?;
-        let identity = Identity::new(&id_convert);
-
-        let sig: IBESecret<TinyBLS377> = identity.extract(msk);
-        let mut sig_vec = Vec::new();
-        sig_vec.push(sig);
 
         let decrypt_result = ciphertext.decrypt(sig_vec).unwrap();
         let message = decrypt_result.message;
         let plaintext = String::from_utf8(message).unwrap();
     
 
-        log("plaintext: ");
+        //TODO: Remove this. We shouldn't log plaintext.
+        log("*****Decrypted plaintext*****");
         log(&plaintext);
+        log("*****************************");
 
-
-        let placeholder = "abc";
-
-        serde_wasm_bindgen::to_value(placeholder).map_err(|_| JsError::new("could not do that"))
-        // let ciphertext: JsValue = serde_wasm_bindgen::from_value(ciphertext_js.clone());
-        // ciphertext
+        serde_wasm_bindgen::to_value(&plaintext).map_err(|_| JsError::new("could not do that"))
     }
-
-//     #[wasm_bindgen]
-//     pub fn decrypt(
-//         &self,
-//         ciphertext_bytes: JsValue, // Vec<u8>
-//         nonce_bytes: JsValue, // Vec<u8>
-//         capsule_bytes: JsValue, // Vec<Vec<u8>>
-//         sks_bytes: JsValue, // Vec<Vec<u8>>
-//     ) -> Result<JsValue, JsError> {
-//         let ibe_pp : Vec<u8> = serde_wasm_bindgen::from_value(self.pps.0.clone())
-//             .map_err(|_| JsError::new("could not decode ibe pp"))?;
-//         let ct: Vec<u8>  = serde_wasm_bindgen::from_value(ciphertext_bytes)
-//             .map_err(|_| JsError::new("could not decode the ciphertext"))?;
-//         let nonce: Vec<u8>  = serde_wasm_bindgen::from_value(nonce_bytes)
-//             .map_err(|_| JsError::new("could not decode the nonce"))?;
-
-//         let capsule: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(capsule_bytes)
-//             .map_err(|_| JsError::new("could not decode the capsule"))?;
-//         let sks: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(sks_bytes)
-//             .map_err(|_| JsError::new("could not decode the secret keys"))?;
-//         let out = 
-//             DefaultApi::<IbeDleqVerifier, BfIbe, DefaultTlock<BfIbe>>::decrypt(
-//                 ibe_pp, ct, nonce, capsule, sks)
-//                 .map_err(|_| JsError::new("decryption failed"))?;
-//         serde_wasm_bindgen::to_value(&out)
-//             .map_err(|_| JsError::new("could not convert to JsValue"))
-//     }
-// }
-
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct IbeTestParams {
-//     pub p: Vec<u8>,
-//     pub q: Vec<u8>,
-//     pub s: Vec<u8>,
-// }
-
-// // the functions below are for testing purposes only
-// // TODO: wrap this in a feature? how do features work with wasm?
-// // #[cfg_attr(tarpaulin, skip)]
-// #[wasm_bindgen]
-// pub fn random_ibe_params() -> Result<JsValue, JsError> {
-//     let ibe_pp: G2 = G2::generator();
-//     let s = Fr::rand(&mut test_rng());
-//     let p_pub: G2 = ibe_pp.mul(s).into();
-
-//     serde_wasm_bindgen::to_value(&IbeTestParams {
-//         p: convert_to_bytes::<G2, 96>(ibe_pp).to_vec(),
-//         q: convert_to_bytes::<G2, 96>(p_pub).to_vec(),
-//         s: convert_to_bytes::<Fr, 32>(s).to_vec(),
-//     }).map_err(|_| JsError::new("could not convert ibe test params to JsValue"))
-// }
-
-// // #[cfg_attr(tarpaulin, skip)]
-// #[wasm_bindgen]
-// pub fn ibe_extract(x: JsValue, ids_bytes: JsValue) -> Result<JsValue, JsError> {
-//     let ids: Vec<Vec<u8>> = serde_wasm_bindgen::from_value(ids_bytes)
-//         .map_err(|_| JsError::new("could not decode ids"))?;
-//     let sk_bytes: Vec<u8> = serde_wasm_bindgen::from_value(x)
-//         .map_err(|_| JsError::new("could not decode secret x"))?;
-//     let s = Fr::deserialize_compressed(&sk_bytes[..]).unwrap();
-//     let mut secrets: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
-//     for id in ids {
-//         let pk = hash_to_g1(&id);
-//         let sk = pk.mul(s);
-//         let pk_bytes = convert_to_bytes::<G1, 48>(pk);
-//         let sk_bytes = convert_to_bytes::<G1, 48>(sk.into());
-//         secrets.push((sk_bytes.to_vec(), pk_bytes.to_vec()));
-//     }
-
-//     serde_wasm_bindgen::to_value(&secrets)
-//         .map_err(|_| JsError::new("could not convert secrets to JsValue"))
-// }
 
 #[wasm_bindgen]
 extern "C" {
