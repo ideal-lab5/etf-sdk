@@ -107,6 +107,7 @@ impl Identity {
 }
 
 /// The output of the IBE extract algorithm is a BLS signature
+#[derive(Debug, Clone, CanonicalDeserialize, CanonicalSerialize, Serialize, Deserialize)]
 pub struct IBESecret<E: EngineBLS>(pub E::SignatureGroup);
 
 impl<E: EngineBLS> IBESecret<E> {
