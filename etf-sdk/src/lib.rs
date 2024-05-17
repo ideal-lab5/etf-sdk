@@ -1,4 +1,4 @@
-use ark_serialize::{CanonicalSerialize, Read};
+use ark_serialize::CanonicalSerialize;
 use serde::Deserialize;
 #[cfg_attr(tarpaulin, skip)]
 use wasm_bindgen::prelude::*;
@@ -13,8 +13,6 @@ use w3f_bls::{
 use serde::Serialize;
 use serde_big_array::BigArray;
 use ark_serialize::CanonicalDeserialize;
-use wasm_bindgen::throw_str;
-use core::fmt;
 
  #[wasm_bindgen]
 pub fn encrypt( 
@@ -110,6 +108,7 @@ pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
 
 #[cfg(test)]
 mod test {
+    use std::any::Any;
     use super::*;
     use wasm_bindgen_test::*;
     use w3f_bls::{
@@ -127,7 +126,7 @@ mod test {
     fn setup_test<E: EngineBLS>(
         identity_vec: Vec<u8>,
         message: Vec<u8>,
-        fail_decrypt: bool,
+        succesful_decrypt: bool,
         handler: &dyn Fn(TestStatusReport) -> ()
     ){
 
@@ -157,7 +156,7 @@ mod test {
         let sig: IBESecret<TinyBLS377> = identity.extract(msk);
         let sig_vec = vec![sig];
         let mut sig_bytes: Vec<_> = Vec::new();
-        if !fail_decrypt {
+        if succesful_decrypt {
             sig_vec.serialize_compressed(&mut sig_bytes).unwrap();
         } else {
             let bad_ident_vec = b"bad_ident".to_vec();
@@ -200,7 +199,7 @@ mod test {
     pub fn can_encrypt_decrypt() {
         let message: Vec<u8> = b"this is a test message".to_vec();
         let id: Vec<u8> = b"testing purposes".to_vec();
-        setup_test::<TinyBLS377>(id, message.clone(), false, &|status: TestStatusReport| {
+        setup_test::<TinyBLS377>(id, message.clone(), true, &|status: TestStatusReport| {
             match status {
                 TestStatusReport::EncryptSuccess { ciphertext } => {
                     let ciphertext_convert: Vec<u8> = serde_wasm_bindgen::from_value(ciphertext.clone()).unwrap();
@@ -221,7 +220,7 @@ mod test {
     pub fn decrypt_failure() {
         let message: Vec<u8> = b"this is a test message".to_vec();
         let id: Vec<u8> = b"testing purposes".to_vec();
-        setup_test::<TinyBLS377>(id, message.clone(), true, &|status: TestStatusReport| {
+        setup_test::<TinyBLS377>(id, message.clone(), false, &|status: TestStatusReport| {
             match status{
                 TestStatusReport::EncryptSuccess { ciphertext } => {
                     let ciphertext_convert: Vec<u8> = serde_wasm_bindgen::from_value(ciphertext.clone()).unwrap();
@@ -229,7 +228,15 @@ mod test {
                     assert_ne!(ciphertext_convert, message);
                 },
                 TestStatusReport::DecryptFailure { error } => {
-                    assert!(true);
+                    // This test needs to be updated. As of right now, there doesn't seem to be a way to reliably compare errors
+                    // however the test will fail if no error is thrown from decrypt. We just won't know if it was the decrypt function failing.
+                    // NOTE: TypeId comes from the std library. 
+                    // A `TypeId` represents a globally unique identifier for a type.
+                    let error_compare = JsError::new("this is irrelevant. We only check that it's a JsError (which it always is)");
+                    let type_id_compare = error_compare.type_id();
+                    let type_id = error.type_id();
+
+                    assert_eq!(type_id, type_id_compare);
                 },
                 _=> panic!("decrypt was successful")
             }
@@ -237,49 +244,3 @@ mod test {
     }
         
 }
-
-//     // #[wasm_bindgen_test]
-//     // pub fn wrapper_can_decrypt() {
-//     //     let message_js = serde_wasm_bindgen::to_value(b"test").unwrap();
-//     //     let slot_ids = vec![vec![1, 2, 3], vec![2, 3, 4]];
-//     //     let slot_ids_js = serde_wasm_bindgen::to_value(&slot_ids).unwrap();
-
-//     //     let s = Fr::rand(&mut test_rng());
-//     //     let g = G2::rand(&mut test_rng());
-//     //     let p: G2 = g.mul(s).into();
-//     //     let g_bytes = convert_to_bytes::<G2, 96>(g).to_vec();
-//     //     let p_bytes = convert_to_bytes::<G2, 96>(p).to_vec();
-//     //     let x1 = serde_wasm_bindgen::to_value(&g_bytes).unwrap();
-//     //     let x2 = serde_wasm_bindgen::to_value(&p_bytes).unwrap();
-//     //     let etf = EtfApiWrapper::create(x1, x2);
-//     //     match etf.encrypt(message_js, slot_ids_js, 3) {
-//     //         Ok(ct) => {
-//     //             let t: crypto::client::client::AesIbeCt = serde_wasm_bindgen::from_value(ct).unwrap();
-//     //             let ct_bytes = serde_wasm_bindgen::to_value(&t.aes_ct.ciphertext).unwrap();
-//     //             let nonce_bytes = serde_wasm_bindgen::to_value(&t.aes_ct.nonce).unwrap();
-//     //             let capsule_bytes = serde_wasm_bindgen::to_value(&t.etf_ct).unwrap();
-//     //             // calc valid secrets d = sQ
-//     //             let secrets: Vec<Vec<u8>> = slot_ids.iter().map(|id| {
-//     //                 let q = hash_to_g1(&id);
-//     //                 let d = q.mul(s);
-//     //                 convert_to_bytes::<G1, 48>(d.into()).to_vec()
-//     //             }).collect::<Vec<_>>();
-
-//     //             let sks = serde_wasm_bindgen::to_value(&secrets).unwrap();
-
-//     //             match etf.decrypt(ct_bytes, nonce_bytes, capsule_bytes, sks) {
-//     //                 Ok(m_js) => {
-//     //                     let m: Vec<u8> = serde_wasm_bindgen::from_value(m_js).unwrap();
-//     //                     assert_eq!(m, b"test".to_vec());
-//     //                 }, 
-//     //                 Err(_) => {
-//     //                     panic!("test should pass, but decryption failed");
-//     //                 }
-//     //             }
-//     //         },
-//     //         Err(_) => {
-//     //             panic!("test should pass, but encryption failed");
-//     //         }
-//     //     }
-//     // }
-// }
