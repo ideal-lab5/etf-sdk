@@ -86,8 +86,8 @@ pub struct KeyChain {
 
 #[wasm_bindgen]
 pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
-    let seed_string: String = serde_wasm_bindgen::from_value(seed).unwrap();
-    let seed_vec = seed_string.as_bytes();
+    let seed_vec: Vec<u8> = serde_wasm_bindgen::from_value(seed).map_err(|_| JsError::new("Could not convert seed to string"))?;
+    let seed_vec = seed_vec.as_slice();
     let seed_hash : [u8;32]= utils::sha256(seed_vec).try_into().unwrap();
     let mut rng: ChaCha20Rng = ChaCha20Rng::from_seed(seed_hash);
     let keypair = w3f_bls::KeypairVT::<TinyBLS377>::generate(&mut rng);
@@ -104,7 +104,24 @@ pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
     serde_wasm_bindgen::to_value(&kc).map_err(|_| JsError::new("could not convert secret key to JsValue"))
 }
 
+#[wasm_bindgen]
+pub fn extract_signature(id: JsValue, sk_js: JsValue) -> Result<JsValue, JsError> {
+    // let sk_vec: Vec<u8> = serde_wasm_bindgen::from_value(sk).map_err(|_| JsError::new("Could not sk to vec"))?;
+    // let sk_array = sk_vec.as_slice();
+    let sk: [u8;32] = serde_wasm_bindgen::from_value(sk_js).map_err(|_| JsError::new("Could not sk to array"))?;
+    let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&sk.clone()).unwrap();
+    let identity_vec: Vec<u8> = serde_wasm_bindgen::from_value(id).map_err(|_| JsError::new("Could not convert id to vec"))?;
+    let identity = Identity::new(&identity_vec);
 
+
+    let sig: IBESecret<TinyBLS377> = identity.extract(msk);
+    let sig_vec = vec![sig];
+    let mut sig_bytes: Vec<_> = Vec::new();
+    sig_vec.serialize_compressed(&mut sig_bytes).unwrap();
+
+    serde_wasm_bindgen::to_value(&sig_bytes).map_err(|_| JsError::new("extraction failed"))
+
+}
 
 #[cfg(test)]
 mod test {
@@ -130,8 +147,8 @@ mod test {
         handler: &dyn Fn(TestStatusReport) -> ()
     ){
 
-        let seed_string = "seeeeeeed";
-        let seed = serde_wasm_bindgen::to_value(seed_string).unwrap();
+        let seed_bytes = "seeeeeeed".as_bytes();
+        let seed = serde_wasm_bindgen::to_value(seed_bytes).unwrap();
 
         let keys_js = generate_keys(seed).ok().unwrap();
         let key_chain: KeyChain = serde_wasm_bindgen::from_value(keys_js).unwrap();
