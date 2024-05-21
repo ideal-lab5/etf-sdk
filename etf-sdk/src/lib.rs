@@ -6,10 +6,7 @@ use etf_crypto_primitives::{self, encryption::tlock::{DecryptionResult, SecretKe
 use w3f_bls::{EngineBLS, TinyBLS377};
 use rand_chacha::ChaCha20Rng;
 use ark_std::rand::SeedableRng;
-use w3f_bls::{
-    DoublePublicKey,
-    DoublePublicKeyScheme,
-};
+use w3f_bls::{DoublePublicKey, DoublePublicKeyScheme};
 use serde::Serialize;
 use serde_big_array::BigArray;
 use ark_serialize::CanonicalDeserialize;
@@ -42,7 +39,7 @@ pub fn encrypt(
     let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, &mut rng).map_err(|_| JsError::new("encryption has failed"))?;
     ciphertext.serialize_compressed(&mut ciphertext_bytes).map_err(|_| JsError::new("ciphertext serialization has failed"))?;
     
-    return serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert ciphertext to JsValue"));
+    serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert ciphertext to JsValue"))
 }
 
 #[wasm_bindgen]
