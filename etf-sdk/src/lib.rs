@@ -11,11 +11,11 @@ use serde::Serialize;
 use serde_big_array::BigArray;
 use ark_serialize::CanonicalDeserialize;
 
-// The encrypt wrapper used by the WASM blob to call tlock.rs encrypt function in etf-crypto-primitives
-// * 'id_js': ID string for which the message will be encrypted
-// * 'message_js': Message which will be encrypted
-// * 'sk_js': secret key passed in from UI. This should be obtained elsewhere later on.
-// * 'p_pub_js': the public key commitment for the IBE system
+/// The encrypt wrapper used by the WASM blob to call tlock.rs encrypt function in etf-crypto-primitives
+/// * 'id_js': ID string for which the message will be encrypted
+/// * 'message_js': Message which will be encrypted
+/// * 'sk_js': secret key passed in from UI. This should be obtained elsewhere later on.
+/// * 'p_pub_js': the public key commitment for the IBE system
 #[wasm_bindgen]
 pub fn encrypt( 
     id_js: JsValue,
@@ -47,9 +47,9 @@ pub fn encrypt(
     serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert ciphertext to JsValue"))
 }
 
-// The decrypt wrapper used by the WASM blob to call tlock.rs encrypt function in etf-crypto-primitives
-// * 'ciphertext_js': The string to be decrypted
-// * 'sig_vec_js': The array of BLS signatures required to rebuild the secret key and decrypt the message
+/// The decrypt wrapper used by the WASM blob to call tlock.rs encrypt function in etf-crypto-primitives
+/// * 'ciphertext_js': The string to be decrypted
+/// * 'sig_vec_js': The array of BLS signatures required to rebuild the secret key and decrypt the message
 #[wasm_bindgen]
 pub fn decrypt(
     ciphertext_js: JsValue,
@@ -74,14 +74,14 @@ pub fn decrypt(
     serde_wasm_bindgen::to_value(&plaintext).map_err(|_| JsError::new("plaintext conversion has failed"))
 }
 
-// Temporary logging struct
+/// Temporary logging struct
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = console)]
     fn log(s: &str);
 }
 
-// Struct for testing that allows for the serialization of the double public key type
+/// Struct for testing that allows for the serialization of the double public key type
 #[derive(Serialize, CanonicalSerialize, CanonicalDeserialize, Deserialize, Debug)]
 pub struct KeyChain {
     #[serde(with = "BigArray")]
@@ -90,8 +90,8 @@ pub struct KeyChain {
     pub sk: [u8;32]
 }
 
-// This function is used purely for testing purposes. 
-// It takes in a seed and generates a secret key and public params.
+/// This function is used purely for testing purposes. 
+/// It takes in a seed and generates a secret key and public params.
 #[wasm_bindgen]
 pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
     let seed_vec: Vec<u8> = serde_wasm_bindgen::from_value(seed).map_err(|_| JsError::new("Could not convert seed to string"))?;
@@ -112,8 +112,8 @@ pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
     serde_wasm_bindgen::to_value(&kc).map_err(|_| JsError::new("could not convert secret key to JsValue"))
 }
 
-// This function is for the UI specifically. It allows it to obtain the BLS signature based on the secret key that is passed in.
-// This should be offloaded to another service.
+/// This function is for the UI specifically. It allows it to obtain the BLS signature based on the secret key that is passed to it.
+/// This should be offloaded to another service.
 #[wasm_bindgen]
 pub fn extract_signature(id: JsValue, sk_js: JsValue) -> Result<JsValue, JsError> {
     let sk: [u8;32] = serde_wasm_bindgen::from_value(sk_js).map_err(|_| JsError::new("Could not sk to array"))?;
