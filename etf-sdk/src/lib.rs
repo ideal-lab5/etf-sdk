@@ -112,7 +112,7 @@ pub fn generate_keys(seed: JsValue) -> Result<JsValue, JsError> {
     serde_wasm_bindgen::to_value(&kc).map_err(|_| JsError::new("could not convert secret key to JsValue"))
 }
 
-/// This function is for the UI specifically. It allows it to obtain the BLS signature based on the secret key that is passed to it.
+/// This function is for the UI specifically; allowing it to obtain the BLS signature based on the secret key.
 /// This should be offloaded to another service.
 #[wasm_bindgen]
 pub fn extract_signature(id: JsValue, sk_js: JsValue) -> Result<JsValue, JsError> {
