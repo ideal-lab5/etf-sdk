@@ -26,10 +26,9 @@ pub fn encrypt(
     // msk => master secret key
     let msk_bytes: [u8;32] = serde_wasm_bindgen::from_value(sk_js.clone())
         .map_err(|_| JsError::new("could not decode secret key"))?;
-    let mut rng: ChaCha20Rng = ChaCha20Rng::from_seed(msk_bytes);
+    let rng: ChaCha20Rng = ChaCha20Rng::from_seed(msk_bytes);
     let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&msk_bytes.clone()).ok_or(JsError::new("Could not convert secret key"))?;
     let secret_key = SecretKey::<TinyBLS377>(msk);
-    // Look into String Formatting
     let pp_conversion: Vec<u8> = serde_wasm_bindgen::from_value(p_pub_js.clone())
         .map_err(|_| JsError::new("could not decode p_pub"))?;
     let pp_bytes: [u8;144] = pp_conversion.try_into().map_err(|_| JsError::new("could not convert public params"))?;
@@ -41,7 +40,7 @@ pub fn encrypt(
     let message_bytes: Vec<u8> = serde_wasm_bindgen::from_value(message_js.clone())
         .map_err(|_| JsError::new("could not decode message"))?;
     let mut ciphertext_bytes: Vec<_> = Vec::new();
-    let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, &mut rng).map_err(|_| JsError::new("encryption has failed"))?;
+    let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, rng).map_err(|_| JsError::new("encryption has failed"))?;
     ciphertext.serialize_compressed(&mut ciphertext_bytes).map_err(|_| JsError::new("ciphertext serialization has failed"))?;
     
     serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert ciphertext to JsValue"))
