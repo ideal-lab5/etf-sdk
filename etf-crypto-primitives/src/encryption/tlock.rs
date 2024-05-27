@@ -27,7 +27,6 @@ use ark_poly::{
 };
 
 use ark_serialize::CanonicalDeserialize;
-use ark_serialize::CanonicalSerialize;
 use serde::{Deserialize, Serialize};
 
 use ark_std::{
@@ -50,8 +49,8 @@ pub struct DecryptionResult {
 }
 
 // #[derive(Serialize, Deserialize, Debug)]
-#[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
-// #[derive(Debug)]
+// #[derive(CanonicalDeserialize, CanonicalSerialize, Debug)]
+#[derive(Debug)]
 pub struct TLECiphertext<E: EngineBLS> {
     pub aes_ct: AESOutput,
     pub etf_ct: IBECiphertext<E>
