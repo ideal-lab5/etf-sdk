@@ -13,6 +13,19 @@ The repo is organized as:
 
 This repo has not been audited for security and should not yet be used in production.
 
+## Setup
+
+This code is only guaranteed to work in Linux environments. If you have a windows OS, use WSL and install Ubuntu.
+
+Install rust and build-essentials:
+
+``` bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+. "$HOME/.cargo/env"
+sudo apt-get update
+sudo apt install build-essential
+```
+
 ## Build
 
 ``` shell
