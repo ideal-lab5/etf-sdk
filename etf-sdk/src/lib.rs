@@ -89,6 +89,23 @@ pub struct KeyChain {
     pub sk: [u8;32]
 }
 
+/// build an encoded commitment for use in timelock encryption and sig verification
+#[wasm_bindgen]
+pub fn build_encoded_commitment(
+    block_number_js: JsValue, 
+    validator_set_id_js: JsValue,
+) -> Result<JsValue, JsError> {
+    let bn: u32 = serde_wasm_bindgen::from_value(block_number_js.clone())
+        .map_err(|_| JsError::new("could not decode a u32 from the input"))?;
+    let validator_set_id: u64 = serde_wasm_bindgen::from_value(validator_set_id_js.clone())
+        .map_err(|_| JsError::new("could not decode a u32 from the input"))?;
+    let payload = Payload::from_single_entry(known_payloads::ETF_SIGNATURE, Vec::new());
+    let commitment = Commitment { payload, block_number: bn, validator_set_id: validator_set_id };
+    let encoded = commitment.encode();
+    serde_wasm_bindgen::to_value(&encoded)
+        .map_err(|_| JsError::new("could not convert the encoded commitment to json"))
+}
+
 /// This function is used purely for testing purposes. 
 /// It takes in a seed and generates a secret key and public params.
 #[wasm_bindgen]
@@ -265,6 +282,18 @@ mod test {
                 _=> panic!("decrypt was successful")
             }
         })
+    }
+
+    #[wasm_bindgen_test]
+    pub fn can_build_encoded_commitment() {
+        let bn = serde_wasm_bindgen::to_value(1).unwrap();
+        let vsid = serde_wasm_bindgen::to_value(2).unwrap();
+
+        if let Ok(val) = build_encoded_commitment(bn, vsid) {
+            assert_eq!(vec![0], val);
+        } else {
+            panic!("The test should pass");
+        }
     }
         
 }

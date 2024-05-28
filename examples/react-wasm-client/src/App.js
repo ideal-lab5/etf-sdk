@@ -1,6 +1,6 @@
 /* global BigInt */
 import './App.css';
-import init, {encrypt, decrypt, generate_keys, extract_signature} from "etf";
+import init, {encrypt, decrypt, generate_keys, extract_signature, build_encoded_commitment} from "etf";
 import React, { useEffect, useState} from 'react';
 
 function App() {
@@ -33,7 +33,7 @@ function App() {
   function encrypt_endpoint() {
 
     let t = new TextEncoder();
-    let id = t.encode(inputs.id);
+    let id = t.encode(build_encoded_commitment(parseInt(inputs.id), 1));
     let message = t.encode(inputs.message);
     let seed = t.encode(inputs.seed);
     console.log("encoded values, now encrypting");
@@ -65,7 +65,7 @@ function App() {
     let seed = t.encode(inputs.seed);
     let kc = generate_keys(seed);
     let sk = kc.sk;
-    let id_js = t.encode(inputs.id);
+    let id_js = t.encode(build_encoded_commitment(parseInt(inputs.id), 1));
     let sig_vec = extract_signature(id_js, sk)
     console.log("Decrypting");
     let decrypt_message = decrypt(inputs.cipherText, sig_vec);
@@ -85,7 +85,7 @@ function App() {
           <p>Encryption test</p>
 
           <label>ID:</label>
-          <div><input name = "id" type="text" value={inputs.id} onChange={handleChange}/></div>
+          <div><input name = "id" type="number" value={inputs.id} onChange={handleChange}/></div>
           <label>Seed:</label>
           <div><input name = "seed" value={inputs.seed} type="text" onChange={handleChange}/></div>
           <label>Message to Encrypt</label>
@@ -96,7 +96,10 @@ function App() {
               <div>
                 <div>
                   <label>CipherText</label>
-                  <div>{inputs.cipherText}</div>
+                  <p className='ct-display'>{ '0x' + Array.from(inputs.cipherText, function(byte) {
+                            return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+                          }).join('') }
+                  </p>
                 </div>
                 <div>
                     <button onClick={() => decrypt_endpoint()}>Decrypt</button>
