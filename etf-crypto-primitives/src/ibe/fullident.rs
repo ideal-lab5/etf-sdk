@@ -22,12 +22,13 @@ use ark_std::{
     rand::Rng,
 };
 use ark_std::vec::Vec;
+use serde::{Deserialize, Serialize};
 use crate::utils::{h2, h3_new, h4, cross_product_32};
 
 use w3f_bls::{EngineBLS, Message};
 
 /// represents a ciphertext in the BF-IBE FullIdent scheme
-#[derive(Debug, Clone, PartialEq, CanonicalDeserialize, CanonicalSerialize)]
+#[derive(Debug, Clone, PartialEq, CanonicalDeserialize, CanonicalSerialize, Serialize, Deserialize)]
 pub struct IBECiphertext<E: EngineBLS> {
     /// U = rP
     pub u: E::PublicKeyGroup,
@@ -106,6 +107,7 @@ impl Identity {
 }
 
 /// The output of the IBE extract algorithm is a BLS signature
+#[derive(Debug, Clone, CanonicalDeserialize, CanonicalSerialize, Serialize, Deserialize)]
 pub struct IBESecret<E: EngineBLS>(pub E::SignatureGroup);
 
 impl<E: EngineBLS> IBESecret<E> {

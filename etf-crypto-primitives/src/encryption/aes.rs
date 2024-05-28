@@ -18,6 +18,7 @@ use aes_gcm::{
     aead::{Aead, AeadCore, AeadInPlace, KeyInit},
     Aes256Gcm, Nonce,
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::rand::Rng;
 
 use serde::{Deserialize, Serialize};
@@ -25,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use ark_std::rand::CryptoRng;
 use ark_std::vec::Vec;
 /// The output of AES Encryption plus the ephemeral secret key
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct AESOutput {
     /// the AES ciphertext
     pub ciphertext: Vec<u8>,
