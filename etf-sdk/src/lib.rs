@@ -1,6 +1,22 @@
+/*
+ * Copyright 2024 by Ideal Labs, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 use ark_serialize::CanonicalSerialize;
 use serde::Deserialize;
-#[cfg_attr(tarpaulin, skip)]
+use codec::Encode;
 use wasm_bindgen::prelude::*;
 use etf_crypto_primitives::{self, encryption::tlock::{DecryptionResult, SecretKey, TLECiphertext}, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
 use w3f_bls::{EngineBLS, TinyBLS377};
@@ -10,6 +26,7 @@ use w3f_bls::{DoublePublicKey, DoublePublicKeyScheme};
 use serde::Serialize;
 use serde_big_array::BigArray;
 use ark_serialize::CanonicalDeserialize;
+use sp_consensus_beefy_etf::{Commitment, Payload, known_payloads};
 
 /// The encrypt wrapper used by the WASM blob to call tlock.rs encrypt function in etf-crypto-primitives
 /// * 'id_js': ID string for which the message will be encrypted
