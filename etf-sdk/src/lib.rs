@@ -1,6 +1,22 @@
+/*
+ * Copyright 2024 by Ideal Labs, LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 use ark_serialize::CanonicalSerialize;
 use serde::Deserialize;
-#[cfg_attr(tarpaulin, skip)]
+use codec::Encode;
 use wasm_bindgen::prelude::*;
 use etf_crypto_primitives::{self, encryption::tlock::{DecryptionResult, SecretKey, TLECiphertext}, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
 use w3f_bls::{EngineBLS, TinyBLS377};
@@ -10,6 +26,7 @@ use w3f_bls::{DoublePublicKey, DoublePublicKeyScheme};
 use serde::Serialize;
 use serde_big_array::BigArray;
 use ark_serialize::CanonicalDeserialize;
+use sp_consensus_beefy_etf::{Commitment, Payload, known_payloads};
 
 /// The encrypt wrapper used by the WASM blob to call tlock.rs encrypt function in etf-crypto-primitives
 /// * 'id_js': ID string for which the message will be encrypted
@@ -87,6 +104,23 @@ pub struct KeyChain {
     pub double_public: [u8;144],
 
     pub sk: [u8;32]
+}
+
+/// build an encoded commitment for use in timelock encryption and sig verification
+#[wasm_bindgen]
+pub fn build_encoded_commitment(
+    block_number_js: JsValue, 
+    validator_set_id_js: JsValue,
+) -> Result<JsValue, JsError> {
+    let bn: u32 = serde_wasm_bindgen::from_value(block_number_js.clone())
+        .map_err(|_| JsError::new("could not decode a u32 from the input"))?;
+    let validator_set_id: u64 = serde_wasm_bindgen::from_value(validator_set_id_js.clone())
+        .map_err(|_| JsError::new("could not decode a u32 from the input"))?;
+    let payload = Payload::from_single_entry(known_payloads::ETF_SIGNATURE, Vec::new());
+    let commitment = Commitment { payload, block_number: bn, validator_set_id: validator_set_id };
+    let encoded = commitment.encode();
+    serde_wasm_bindgen::to_value(&encoded)
+        .map_err(|_| JsError::new("could not convert the encoded commitment to json"))
 }
 
 /// This function is used purely for testing purposes. 
@@ -265,6 +299,18 @@ mod test {
                 _=> panic!("decrypt was successful")
             }
         })
+    }
+
+    #[wasm_bindgen_test]
+    pub fn can_build_encoded_commitment() {
+        let bn = serde_wasm_bindgen::to_value(1).unwrap();
+        let vsid = serde_wasm_bindgen::to_value(2).unwrap();
+
+        if let Ok(val) = build_encoded_commitment(bn, vsid) {
+            assert_eq!(vec![0], val);
+        } else {
+            panic!("The test should pass");
+        }
     }
         
 }
