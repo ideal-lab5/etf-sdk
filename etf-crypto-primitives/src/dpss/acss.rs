@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2024 by Ideal Labs, LLC
  *
@@ -15,22 +14,16 @@
  * limitations under the License.
  */
 
-use ark_serialize::CanonicalDeserialize;
-use ark_ff::UniformRand;
-use ark_poly::{
-    polynomial::univariate::DensePolynomial,
-    DenseUVPolynomial, Polynomial,
-};
+use crate::{encryption::hashed_el_gamal::HashedElGamal, proofs::hashed_el_gamal_sigma::BatchPoK};
 use ark_ec::Group;
+use ark_ff::UniformRand;
+use ark_poly::{polynomial::univariate::DensePolynomial, DenseUVPolynomial, Polynomial};
+use ark_serialize::CanonicalDeserialize;
 use ark_std::{
-    marker::PhantomData,
-    vec::Vec, 
-    rand::{CryptoRng, Rng},
     collections::BTreeMap,
-};
-use crate::{
-    encryption::hashed_el_gamal::HashedElGamal,
-    proofs::hashed_el_gamal_sigma::BatchPoK,
+    marker::PhantomData,
+    rand::{CryptoRng, Rng},
+    vec::Vec,
 };
 use w3f_bls::{EngineBLS, KeypairVT, PublicKey};
 
@@ -54,7 +47,7 @@ pub enum ACSSError {
 /// a double secret holds two elements of the scalar field
 pub struct DoubleSecret<E: EngineBLS>(pub E::Scalar, pub E::Scalar);
 
-impl <E: EngineBLS> DoubleSecret<E> {
+impl<E: EngineBLS> DoubleSecret<E> {
     /// create a resharing of a double secret with a committee
     ///
     /// * `committee`: The committee to reshare to
@@ -62,15 +55,12 @@ impl <E: EngineBLS> DoubleSecret<E> {
     /// * `rng`: a CSPRNG
     ///
     pub fn reshare<R: Rng + CryptoRng>(
-        &self, 
-        committee: &[PublicKey<E>], 
-        t: u8, 
-        mut rng: R
+        &self,
+        committee: &[PublicKey<E>],
+        t: u8,
+        mut rng: R,
     ) -> Result<Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
-            HighThresholdACSS::<E>::reshare(
-                self.0, self.1,
-                committee, t, &mut rng
-            )
+        HighThresholdACSS::<E>::reshare(self.0, self.1, committee, t, &mut rng)
     }
 }
 
@@ -87,9 +77,9 @@ impl<E: EngineBLS> Keypair<E> {
     /// note to self: 'pok' is difficult to pluralize, poks doesn't really work since it's proofs of knowledge,
     /// but psok seems even stranger. What if I said 'knowlegde proofs'? pluralized as 'kps'
     pub fn recover(
-        &self, 
-        pok: BatchPoK<E::PublicKeyGroup>, 
-        threshold: u8
+        &self,
+        pok: BatchPoK<E::PublicKeyGroup>,
+        threshold: u8,
     ) -> Result<DoubleSecret<E>, ACSSError> {
         let secret = self.0.secret.0;
         HighThresholdACSS::<E>::recover(secret, vec![pok], threshold)
@@ -101,7 +91,6 @@ pub struct HighThresholdACSS<E: EngineBLS> {
 }
 
 impl<E: EngineBLS> HighThresholdACSS<E> {
-
     /// Construct a resharing for a committee identified by their public keys
     ///
     /// `msk`: the master secret key
@@ -111,32 +100,29 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
     /// `rng`: A CSPRNG
     ///
     pub fn reshare<R: CryptoRng + Rng>(
-        msk: E::Scalar, 
+        msk: E::Scalar,
         msk_hat: E::Scalar,
         committee: &[PublicKey<E>],
         t: u8,
         mut rng: R,
     ) -> Result<Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
-
         if committee.is_empty() {
             return Err(ACSSError::InvalidCommittee);
         }
 
         // f(x) -> [f(0), {(1, f(1)), ..., (n, f(n))}]
-        let evals: BTreeMap<E::Scalar, E::Scalar> = generate_shares_checked::<E, R>(
-            msk, committee.len() as u8, t, &mut rng);
+        let evals: BTreeMap<E::Scalar, E::Scalar> =
+            generate_shares_checked::<E, R>(msk, committee.len() as u8, t, &mut rng);
         // f_hat(x) (blinding polynomial) -> [f'(0), {(1, f'(1)), ...(n, f'(n))}]
-        let evals_hat: BTreeMap<E::Scalar, E::Scalar> = generate_shares_checked::<E, R>(
-            msk_hat, committee.len() as u8, t, &mut rng);
+        let evals_hat: BTreeMap<E::Scalar, E::Scalar> =
+            generate_shares_checked::<E, R>(msk_hat, committee.len() as u8, t, &mut rng);
 
         let mut poks: Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)> = Vec::new();
-        for (pk, (u, u_hat)) in committee.iter()
-            .zip(evals.iter()
-            .zip(evals_hat.iter())) {
+        for (pk, (u, u_hat)) in committee.iter().zip(evals.iter().zip(evals_hat.iter())) {
             if let Ok(pok) = BatchPoK::prove(&[*u.1, *u_hat.1], pk.0, &mut rng) {
                 poks.push((*pk, pok));
             } else {
-                return Err(ACSSError::InvalidMessage)
+                return Err(ACSSError::InvalidMessage);
             }
         }
 
@@ -151,7 +137,7 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
         sk: E::Scalar,
         poks: Vec<BatchPoK<E::PublicKeyGroup>>,
         threshold: u8,
-    ) -> Result<DoubleSecret<E>, ACSSError>  {
+    ) -> Result<DoubleSecret<E>, ACSSError> {
         let q = E::PublicKeyGroup::generator() * sk;
 
         let mut secrets = Vec::new();
@@ -160,7 +146,7 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
         let mut invalid_poks = Vec::new();
 
         for (idx, pok) in poks.iter().enumerate() {
-              if !pok.verify(q) {
+            if !pok.verify(q) {
                 invalid_poks.push(pok);
                 if poks.len() - invalid_poks.len() > threshold as usize {
                     return Err(ACSSError::InsufficientValidPoK);
@@ -170,13 +156,17 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
             let f = E::Scalar::from(idx as u8 + 1);
 
             let r_bytes = HashedElGamal::decrypt(sk, pok.ciphertexts[0].clone()).unwrap();
-            let r = E::Scalar::deserialize_compressed(&r_bytes[..])
-                .map_err(|_| ACSSError::InvalidCiphertext)?;
+            let r = E::Scalar::deserialize_compressed(&r_bytes[..]).map_err(|e| {
+                log::debug!("[etf-sdk] r_bytes Error: {:?}", e);
+                ACSSError::InvalidCiphertext
+            })?;
             secrets.push((f, r));
 
             let r_prime_bytes = HashedElGamal::decrypt(sk, pok.ciphertexts[1].clone()).unwrap();
-            let r_prime = E::Scalar::deserialize_compressed(&r_prime_bytes[..])
-                .map_err(|_| ACSSError::InvalidCiphertext)?;
+            let r_prime = E::Scalar::deserialize_compressed(&r_prime_bytes[..]).map_err(|e| {
+                log::debug!("[etf-sdk] r_prime Error: {:?}", e);
+                ACSSError::InvalidCiphertext
+            })?;
             blinding_secrets.push((f, r_prime));
         }
 
@@ -188,16 +178,16 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
 
 /// randomly sample coefficients for a degree t polynomial `f(x)` such that `f(0) = s`
 /// then output points {(1, f(1), ..., (n, f(n)))}
-/// 
+///
 /// `s`: The secret (value of poly at 0)
 /// `n`: The number of shares to generate
 /// `t`: The threshold (degree of the polynomial)
 /// `rng`: A cryptographically secure rng
 ///
 pub fn generate_shares_checked<E: EngineBLS, R: Rng + Sized>(
-    s: E::Scalar, 
-    n: u8, 
-    t: u8, 
+    s: E::Scalar,
+    n: u8,
+    t: u8,
     rng: &mut R,
 ) -> BTreeMap<E::Scalar, E::Scalar> {
     let mut out: BTreeMap<E::Scalar, E::Scalar> = BTreeMap::new();
@@ -208,15 +198,14 @@ pub fn generate_shares_checked<E: EngineBLS, R: Rng + Sized>(
     // instead of worrying about the threshold t
     // we could instead consider using the number of allowable invalid shares (i.e. n - t)
     if n == 0 || t == 0 || t > n {
-        return out;        
+        return out;
     }
-    let mut coeffs: Vec<E::Scalar> = 
-        (0..t).map(|_| E::Scalar::rand(rng)).collect();
+    let mut coeffs: Vec<E::Scalar> = (0..t).map(|_| E::Scalar::rand(rng)).collect();
     coeffs[0] = s;
-//
+    //
     let f = DensePolynomial::<E::Scalar>::from_coefficients_vec(coeffs);
 
-    (1..n+1).for_each(|i| {
+    (1..n + 1).for_each(|i| {
         let idx = E::Scalar::from(i);
         let eval = f.evaluate(&idx);
         out.insert(idx, eval);
@@ -228,9 +217,9 @@ pub fn generate_shares_checked<E: EngineBLS, R: Rng + Sized>(
 pub mod tests {
 
     use super::*;
-    use ark_std::vec::Vec;
     use ark_ec::Group;
-    use ark_std::{test_rng, rand::SeedableRng};
+    use ark_std::vec::Vec;
+    use ark_std::{rand::SeedableRng, test_rng};
 
     use ark_ff::One;
     use rand_chacha::ChaCha20Rng;
@@ -241,16 +230,22 @@ pub mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestStatusReport {
-        ReshareSoftFail{ size: u8 },
-        ReshareError{ error: ACSSError },
-        RecoverError{ error: ACSSError },
-        Completed{
+        ReshareSoftFail {
+            size: u8,
+        },
+        ReshareError {
+            error: ACSSError,
+        },
+        RecoverError {
+            error: ACSSError,
+        },
+        Completed {
             // recovered secret
-            a: Vec<u8>, 
+            a: Vec<u8>,
             // recovered blinding secret
             b: Vec<u8>,
             // msk
-            c: Vec<u8>, 
+            c: Vec<u8>,
             // blinding msk
             d: Vec<u8>,
         },
@@ -262,7 +257,7 @@ pub mod tests {
         num_actual_signers: u8,
         num_valid_pok: u8,
         do_fail_bad_recover: bool,
-        handler: &dyn Fn(TestStatusReport) -> ()
+        handler: &dyn Fn(TestStatusReport) -> (),
     ) -> () {
         let mut rng = ChaCha20Rng::seed_from_u64(0);
 
@@ -271,32 +266,33 @@ pub mod tests {
 
         let double_secret = DoubleSecret::<E>(msk, msk_prime);
 
-        let mut keys: Vec<Keypair<E>> = (0..m).map(|_| {
-            Keypair::<E>::generate(test_rng())
-        }).collect();
+        let mut keys: Vec<Keypair<E>> =
+            (0..m).map(|_| Keypair::<E>::generate(test_rng())).collect();
 
         let initial_committee_public_keys = keys.iter().map(|kp| kp.public).collect::<Vec<_>>();
 
         let mock_bad_resharing = (
-            PublicKey(E::PublicKeyGroup::generator()), 
+            PublicKey(E::PublicKeyGroup::generator()),
             BatchPoK::prove(
-                &vec![E::Scalar::one(), E::Scalar::one()], 
-                E::PublicKeyGroup::generator(), 
-                test_rng()
-            ).unwrap()
+                &vec![E::Scalar::one(), E::Scalar::one()],
+                E::PublicKeyGroup::generator(),
+                test_rng(),
+            )
+            .unwrap(),
         );
 
         match double_secret.reshare(initial_committee_public_keys.as_slice(), t, &mut rng) {
             Ok(mut resharing) => {
-
                 if resharing.is_empty() {
-                    handler(TestStatusReport::ReshareSoftFail{ size: resharing.len() as u8 });
+                    handler(TestStatusReport::ReshareSoftFail {
+                        size: resharing.len() as u8,
+                    });
 
                     if !do_fail_bad_recover {
                         return ();
                     }
                 } else {
-                    // only the first `num_valid_pok` are valid, the rest are invalid 
+                    // only the first `num_valid_pok` are valid, the rest are invalid
                     resharing = resharing[0..num_valid_pok as usize].to_vec();
                     (num_valid_pok..num_actual_signers)
                         .for_each(|_| resharing.push(mock_bad_resharing.clone()));
@@ -307,19 +303,18 @@ pub mod tests {
                 keys = keys[0..num_actual_signers as usize].to_vec();
                 // then each member of the committee recovers a share
                 keys.iter().enumerate().for_each(|(idx, kp)| {
-
                     let w = Keypair(kp.into_vartime());
                     let r = resharing[idx].1.clone();
 
                     match w.recover(r, t) {
                         Ok(recovered_share) => {
                             recovered_shares.push(recovered_share);
-                        },
+                        }
                         Err(e) => {
-                            handler(TestStatusReport::RecoverError{ error : e });
+                            handler(TestStatusReport::RecoverError { error: e });
                             return ();
                         }
-                    }                  
+                    }
                 });
 
                 let msk_shares: Vec<(E::Scalar, E::Scalar)> = recovered_shares
@@ -328,23 +323,22 @@ pub mod tests {
                     .map(|(idx, share)| (E::Scalar::from(idx as u8 + 1), share.0))
                     .collect();
                 let recovered_msk = crate::utils::interpolate::<E::SignatureGroup>(msk_shares);
-        
+
                 let msk_hat_shares: Vec<(E::Scalar, E::Scalar)> = recovered_shares
                     .iter()
                     .enumerate()
                     .map(|(idx, share)| (E::Scalar::from(idx as u8 + 1), share.1))
                     .collect();
-                let recovered_msk_hat = crate::utils::interpolate::<E::SignatureGroup>(msk_hat_shares);
+                let recovered_msk_hat =
+                    crate::utils::interpolate::<E::SignatureGroup>(msk_hat_shares);
 
                 let a = convert_to_bytes::<E::Scalar, 32>(recovered_msk).to_vec();
                 let b = convert_to_bytes::<E::Scalar, 32>(recovered_msk_hat).to_vec();
                 let c = convert_to_bytes::<E::Scalar, 32>(msk).to_vec();
                 let d = convert_to_bytes::<E::Scalar, 32>(msk_prime).to_vec();
-                handler(TestStatusReport::Completed{ a, b, c, d });
-            }, 
-            Err(e) => {
-                handler(TestStatusReport::ReshareError{ error : e })
+                handler(TestStatusReport::Completed { a, b, c, d });
             }
+            Err(e) => handler(TestStatusReport::ReshareError { error: e }),
         }
 
         ()
@@ -358,7 +352,7 @@ pub mod tests {
         // num valid poks: 1
         acss_with_engine_bls::<TinyBLS377>(1, 1, 1, 1, false, &|status: TestStatusReport| {
             match status {
-                TestStatusReport::Completed{ a, b, c, d } => {
+                TestStatusReport::Completed { a, b, c, d } => {
                     assert_eq!(a, c);
                     assert_eq!(b, d);
                 }
@@ -377,7 +371,7 @@ pub mod tests {
         // num valid poks: 3
         acss_with_engine_bls::<TinyBLS377>(3, 3, 3, 3, false, &|status: TestStatusReport| {
             match status {
-                TestStatusReport::Completed{ a, b, c, d } => {
+                TestStatusReport::Completed { a, b, c, d } => {
                     assert_eq!(a, c);
                     assert_eq!(b, d);
                 }
@@ -396,7 +390,7 @@ pub mod tests {
         // num valid poks: 2
         acss_with_engine_bls::<TinyBLS377>(3, 2, 2, 2, false, &|status: TestStatusReport| {
             match status {
-                TestStatusReport::Completed{ a, b, c, d } => {
+                TestStatusReport::Completed { a, b, c, d } => {
                     assert_eq!(a, c);
                     assert_eq!(b, d);
                 }
@@ -407,26 +401,23 @@ pub mod tests {
         });
     }
 
-    
     #[test]
     pub fn acss_fails_with_many_member_committee_less_than_threshold_sigs() {
         // committe size: 3
         // threshold: 3
         // num actual signers: 1
         // num valid poks: 1
-        acss_with_engine_bls::<TinyBLS377>(3, 3, 1, 1, false, 
-            &|status: TestStatusReport| {
-                match status {
-                    TestStatusReport::Completed{ a, b, c, d } => {
-                        assert!(a != c);
-                        assert!(b != d);
-                    }
-                    _ => {
-                        panic!("The test should report `completed`");
-                    }
+        acss_with_engine_bls::<TinyBLS377>(3, 3, 1, 1, false, &|status: TestStatusReport| {
+            match status {
+                TestStatusReport::Completed { a, b, c, d } => {
+                    assert!(a != c);
+                    assert!(b != d);
+                }
+                _ => {
+                    panic!("The test should report `completed`");
                 }
             }
-        );
+        });
     }
 
     #[test]
@@ -437,34 +428,32 @@ pub mod tests {
         // num valid poks: 0
         acss_with_engine_bls::<TinyBLS377>(0, 0, 0, 0, false, &|status: TestStatusReport| {
             match status {
-                TestStatusReport::ReshareError{ error } => {
+                TestStatusReport::ReshareError { error } => {
                     assert_eq!(error, ACSSError::InvalidCommittee);
-                },
+                }
                 _ => {
                     panic!("The resharing should fail");
                 }
             }
         });
     }
-    
+
     #[test]
     pub fn acss_reshare_fails_with_zero_threshold() {
         // committe size: 3
         // threshold: 0
         // num actual signers: 3 <-- irrelevant in this test
         // num valid poks: 3 <-- irrelevant in this test
-        acss_with_engine_bls::<TinyBLS377>(3, 0, 3, 3, false, 
-            &|status: TestStatusReport| {
-                match status {
-                    TestStatusReport::ReshareSoftFail{ size } => {
-                        assert_eq!(size, 0)
-                    },
-                    _ => {
-                        panic!("All other conditions are invalid");
-                    }
+        acss_with_engine_bls::<TinyBLS377>(3, 0, 3, 3, false, &|status: TestStatusReport| {
+            match status {
+                TestStatusReport::ReshareSoftFail { size } => {
+                    assert_eq!(size, 0)
+                }
+                _ => {
+                    panic!("All other conditions are invalid");
                 }
             }
-        );
+        });
     }
 
     #[test]
@@ -473,35 +462,33 @@ pub mod tests {
         // threshold: 2
         // num actual signers: 2
         // num valid poks: 1
-        acss_with_engine_bls::<TinyBLS377>(3, 2, 2, 1, false, 
-            &|status: TestStatusReport| {
-                match status {
-                    TestStatusReport::RecoverError{ error } => {
-                        assert_eq!(error, ACSSError::InvalidCiphertext);
-                    },
-                    TestStatusReport::Completed{ a, b, c, d } => {
-                        assert!(a != c);
-                        assert!(b != d);
-                    },
-                    _ => {
-                        panic!("All other conditions are invalid");
-                    }
+        acss_with_engine_bls::<TinyBLS377>(3, 2, 2, 1, false, &|status: TestStatusReport| {
+            match status {
+                TestStatusReport::RecoverError { error } => {
+                    assert_eq!(error, ACSSError::InvalidCiphertext);
+                }
+                TestStatusReport::Completed { a, b, c, d } => {
+                    assert!(a != c);
+                    assert!(b != d);
+                }
+                _ => {
+                    panic!("All other conditions are invalid");
                 }
             }
-        );
+        });
     }
 
     pub fn test_generate_shares_checked<E: EngineBLS>(
-        n: u8, 
+        n: u8,
         t: u8,
         expected_output_buffer_size: usize,
     ) {
         let mut rng = ChaCha20Rng::seed_from_u64(0);
         let msk = E::Scalar::rand(&mut rng);
 
-        let evals: BTreeMap<E::Scalar, E::Scalar> = 
+        let evals: BTreeMap<E::Scalar, E::Scalar> =
             generate_shares_checked::<E, ChaCha20Rng>(msk, n, t, &mut rng);
-        
+
         assert_eq!(evals.len(), expected_output_buffer_size);
     }
 
