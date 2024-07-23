@@ -32,7 +32,7 @@ use crate::{
     encryption::hashed_el_gamal::HashedElGamal,
     proofs::hashed_el_gamal_sigma::BatchPoK,
 };
-use w3f_bls::{EngineBLS, KeypairVT, PublicKey};
+use w3f_bls::{EngineBLS, KeypairVT, PublicKey, SecretKeyVT};
 
 /// errors for the ACSS algorithm
 #[derive(Debug, PartialEq)]
@@ -134,7 +134,9 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
             .zip(evals.iter()
             .zip(evals_hat.iter())) {
             if let Ok(pok) = BatchPoK::prove(&[*u.1, *u_hat.1], pk.0, &mut rng) {
-                poks.push((*pk, pok));
+                // lets get a public key while we're at it...
+                let etf_pk = SecretKeyVT::<E>(*u.1).into_public();
+                poks.push((etf_pk, pok));
             } else {
                 return Err(ACSSError::InvalidMessage)
             }
