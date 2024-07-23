@@ -32,7 +32,7 @@ use crate::{
     encryption::hashed_el_gamal::HashedElGamal,
     proofs::hashed_el_gamal_sigma::BatchPoK,
 };
-use w3f_bls::{EngineBLS, KeypairVT, PublicKey, SecretKeyVT};
+use w3f_bls::{DoublePublicKey, DoublePublicKeyScheme, EngineBLS, KeypairVT, PublicKey, SecretKeyVT};
 
 /// errors for the ACSS algorithm
 #[derive(Debug, PartialEq)]
@@ -66,7 +66,7 @@ impl <E: EngineBLS> DoubleSecret<E> {
         committee: &[PublicKey<E>], 
         t: u8, 
         mut rng: R
-    ) -> Result<Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
+    ) -> Result<Vec<(DoublePublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
             HighThresholdACSS::<E>::reshare(
                 self.0, self.1,
                 committee, t, &mut rng
@@ -116,7 +116,7 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
         committee: &[PublicKey<E>],
         t: u8,
         mut rng: R,
-    ) -> Result<Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
+    ) -> Result<Vec<(DoublePublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
 
         if committee.is_empty() {
             return Err(ACSSError::InvalidCommittee);
@@ -129,13 +129,13 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
         let evals_hat: BTreeMap<E::Scalar, E::Scalar> = generate_shares_checked::<E, R>(
             msk_hat, committee.len() as u8, t, &mut rng);
 
-        let mut poks: Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)> = Vec::new();
+        let mut poks: Vec<(DoublePublicKey<E>, BatchPoK<E::PublicKeyGroup>)> = Vec::new();
         for (pk, (u, u_hat)) in committee.iter()
             .zip(evals.iter()
             .zip(evals_hat.iter())) {
             if let Ok(pok) = BatchPoK::prove(&[*u.1, *u_hat.1], pk.0, &mut rng) {
                 // lets get a public key while we're at it...
-                let etf_pk = SecretKeyVT::<E>(*u.1).into_public();
+                let etf_pk = SecretKeyVT::<E>(*u.1).into_double_public_key();
                 poks.push((etf_pk, pok));
             } else {
                 return Err(ACSSError::InvalidMessage)
