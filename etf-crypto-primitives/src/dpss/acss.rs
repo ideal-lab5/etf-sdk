@@ -279,18 +279,20 @@ pub mod tests {
 
         let initial_committee_public_keys = keys.iter().map(|kp| kp.public).collect::<Vec<_>>();
 
-        let mock_bad_resharing = (
-            PublicKey(E::PublicKeyGroup::generator()), 
+        let mock_bad_resharing =
             BatchPoK::prove(
                 &vec![E::Scalar::one(), E::Scalar::one()], 
                 E::PublicKeyGroup::generator(), 
                 test_rng()
-            ).unwrap()
-        );
+            ).unwrap();
+        // );
 
         match double_secret.reshare(initial_committee_public_keys.as_slice(), t, &mut rng) {
             Ok(mut resharing) => {
-
+                let mut poks: Vec<BatchPoK<E::PublicKeyGroup>> = resharing
+                    .iter()
+                    .map(|r| r.1.clone())
+                    .collect();
                 if resharing.is_empty() {
                     handler(TestStatusReport::ReshareSoftFail{ size: resharing.len() as u8 });
 
@@ -299,9 +301,9 @@ pub mod tests {
                     }
                 } else {
                     // only the first `num_valid_pok` are valid, the rest are invalid 
-                    resharing = resharing[0..num_valid_pok as usize].to_vec();
+                    poks = poks[0..num_valid_pok as usize].to_vec();
                     (num_valid_pok..num_actual_signers)
-                        .for_each(|_| resharing.push(mock_bad_resharing.clone()));
+                        .for_each(|_| poks.push(mock_bad_resharing.clone()));
                 }
 
                 let mut recovered_shares: Vec<DoubleSecret<E>> = Vec::new();
@@ -311,7 +313,7 @@ pub mod tests {
                 keys.iter().enumerate().for_each(|(idx, kp)| {
 
                     let w = Keypair(kp.into_vartime());
-                    let r = resharing[idx].1.clone();
+                    let r = poks[idx].clone();
 
                     match w.recover(r, t) {
                         Ok(recovered_share) => {

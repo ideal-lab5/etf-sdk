@@ -38,7 +38,7 @@ use ark_std::{
 use w3f_bls::EngineBLS;
 
 /// a secret key used for encryption/decryption
-pub type OpaqueSecretKey = Vec<u8>;
+pub type OpaqueSecretKey = [u8;32];
 
 /// the result of successful decryption of a timelocked ciphertext
 #[derive(Serialize, Deserialize, Debug)]
@@ -69,19 +69,19 @@ pub enum ClientError {
     Other,
 }
 
-pub struct Tlock<E: EngineBLS> {
-    _p: core::marker::PhantomData<E>,
-}
+// pub struct Tlock<E: EngineBLS> {
+//     _p: core::marker::PhantomData<E>,
+// }
 
 // can we make this not public? will do later on..
-pub struct SecretKey<E: EngineBLS>(pub E::Scalar);
+// pub struct SecretKey<E: EngineBLS>(pub E::Scalar);
 
-impl<E: EngineBLS> SecretKey<E> {
+// impl<E: EngineBLS> SecretKey<E> {
 
-    /// construct a secret key from a scalar
-    pub fn new(sk: E::Scalar) -> Self {
-        Self(sk)
-    }
+    // /// construct a secret key from a scalar
+    // pub fn new(sk: E::Scalar) -> Self {
+    //     Self(sk)
+    // }
 
     /// encrypt a message for an identity
     ///
@@ -90,123 +90,116 @@ impl<E: EngineBLS> SecretKey<E> {
     /// * `id`: the identity to encrypt for
     /// * `rng`: a CSPRNG
     ///
-    pub fn encrypt<R: Rng + CryptoRng + Sized>(
-        &self,
-        p_pub: E::PublicKeyGroup,
-        message: &[u8],
-        id: Identity,
-        mut rng: R,
-    ) -> Result<TLECiphertext<E>, ClientError> {
-        let msk = self.0;
-        let msk_bytes = convert_to_bytes::<E::Scalar, 32>(msk);
-        let ct_aes = aes::encrypt(message, msk_bytes, &mut rng)
-            .map_err(|_| ClientError::AesEncryptError)?; // not sure how to test this line...
-
-        // let p_pub = <<E as EngineBLS>::PublicKeyGroup as Group>::generator() * msk;
-        let b: [u8;32] = convert_to_bytes::<E::Scalar, 32>(msk);
-        let ct: IBECiphertext<E> = id.encrypt(&b, p_pub, &mut rng);
-        Ok(TLECiphertext {
-            aes_ct: ct_aes, 
-            etf_ct: ct
-        })
-    }
+pub fn tle<E, R: Rng + CryptoRng + Sized>(
+    p_pub: E::PublicKeyGroup,
+    secret_key: OpaqueSecretKey,
+    message: &[u8],
+    id: Identity,
+    mut rng: R,
+) -> Result<TLECiphertext<E>, ClientError> 
+where E: EngineBLS {
+    let ct_aes = aes::encrypt(message, secret_key, &mut rng)
+        .map_err(|_| ClientError::AesEncryptError)?; // not sure how to test this line...
+    let ct: IBECiphertext<E> = id.encrypt(&secret_key, p_pub, &mut rng);
+    Ok(TLECiphertext {
+        aes_ct: ct_aes, 
+        etf_ct: ct
+    })
 }
+// }
 
 impl<E: EngineBLS> TLECiphertext<E> {
-    /// assumes the order of the ibe_secrets should match the order 
-    /// in which the ciphertexts were created
-    pub fn decrypt(
+    /// decrypt a ciphertext created as a result of timelock encryption
+    /// the signature should be equivalent to the output of IBE.Extract(ID)
+    /// where ID is the identity for which the message was created
+    pub fn tld(
         &self,
-        ibe_secrets: Vec<IBESecret<E>>,
+        sig: E::SignatureGroup,
     ) -> Result<DecryptionResult, ClientError> {
-        let shares: Vec<(E::Scalar, E::SignatureGroup)> = 
-            ibe_secrets.iter().enumerate().map(|(idx, share)| 
-                (E::Scalar::from(idx as u8 + 1), share.0)
-            ).collect();
-        let sig = interpolate_threshold_bls_sigs::<E>(shares);
-        let secret_bytes = IBESecret(sig).decrypt(&self.etf_ct)
+        let secret_bytes = IBESecret(sig)
+            .decrypt(&self.etf_ct)
             .map_err(|_| ClientError::DecryptionError)?;
-        let secret_scalar = E::Scalar::deserialize_compressed(&secret_bytes[..])
-                .map_err(|_| ClientError::DeserializationError)?;
-        let o = convert_to_bytes::<E::Scalar, 32>(secret_scalar);
 
-        if let Ok(plaintext) = aes::decrypt(AESOutput{
+        let secret_array: [u8;32] = secret_bytes.clone().try_into()
+            .unwrap_or([0u8;32]);
+
+        if let Ok(plaintext) = aes::decrypt(AESOutput {
             ciphertext: self.aes_ct.ciphertext.clone(), 
             nonce: self.aes_ct.nonce.clone(), 
-            key: o.to_vec(),
+            key: secret_bytes,
         }) {
             return Ok(DecryptionResult{
                 message: plaintext,
-                secret: o.to_vec(),
+                secret: secret_array,
             });
         }
         Err(ClientError::DecryptionError)
     }
 }
 
-/// Generate a random polynomial f and return evalulations (f(0), (1, f(1), ..., n, f(n)))
-/// f(0) is the 'secret' and the shares can be used to recover the secret with `let s = interpolate(shares);`
-///
-/// * `n`: The number of shares to generate
-/// * `t`: The degree of the polynomial (i.e. the threhsold)
-/// * `rng`: A random number generator
-///
-pub fn generate_secrets<
-    E: EngineBLS, 
-    R: Rng + Sized + CryptoRng
->(
-    n: u8, 
-    t: u8, 
-    mut rng: &mut R
-) -> (E::Scalar, Vec<(E::Scalar, E::Scalar)>) {    
-    if  n == 1 {
-        let r = E::Scalar::rand(&mut rng);
-        return (r, vec![(E::Scalar::zero(), r)]);
-    }
+// /// Generate a random polynomial f and return evalulations (f(0), (1, f(1), ..., n, f(n)))
+// /// f(0) is the 'secret' and the shares can be used to recover the secret with `let s = interpolate(shares);`
+// ///
+// /// * `n`: The number of shares to generate
+// /// * `t`: The degree of the polynomial (i.e. the threhsold)
+// /// * `rng`: A random number generator
+// ///
+// pub fn generate_secrets<
+//     E: EngineBLS, 
+//     R: Rng + Sized + CryptoRng
+// >(
+//     n: u8, 
+//     t: u8, 
+//     mut rng: &mut R
+// ) -> (E::Scalar, Vec<(E::Scalar, E::Scalar)>) {    
+//     if  n == 1 {
+//         let r = E::Scalar::rand(&mut rng);
+//         return (r, vec![(E::Scalar::zero(), r)]);
+//     }
 
-    let f = DensePolynomial::<E::Scalar>::rand(t as usize - 1, &mut rng);
-    let msk = f.evaluate(&E::Scalar::zero());
-    let evals: Vec<(E::Scalar, E::Scalar)> = (0..n)
-        .map(|i| {
-            // we need to offset by 1 to avoid evaluation of the msk
-            let e = E::Scalar::from(i + 1);
-            (e, f.evaluate(&e))
-        }).collect();
-    (msk, evals)
-}
+//     let f = DensePolynomial::<E::Scalar>::rand(t as usize - 1, &mut rng);
+//     let msk = f.evaluate(&E::Scalar::zero());
+//     let evals: Vec<(E::Scalar, E::Scalar)> = (0..n)
+//         .map(|i| {
+//             // we need to offset by 1 to avoid evaluation of the msk
+//             let e = E::Scalar::from(i + 1);
+//             (e, f.evaluate(&e))
+//         }).collect();
+//     (msk, evals)
+// }
 
-/// interpolate a polynomial from the input and evaluate it at 0
-/// P(X) = sum_{i = 0} ^n (y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj)))
-///
-/// * `points`: a vec of (x, f(x)*Q <- BLS.sign(ID)) pairs
-///
-pub fn interpolate_threshold_bls_sigs<E: EngineBLS>(
-    points: Vec<(E::Scalar, E::SignatureGroup)>
-) -> E::SignatureGroup {
-    let n = points.len();
-    // Calculate the Lagrange basis polynomials evaluated at 0
-    let mut interpolated_value = E::SignatureGroup::zero();
+// /// interpolate a polynomial from the input and evaluate it at 0
+// /// P(X) = sum_{i = 0} ^n (y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj)))
+// ///
+// /// * `points`: a vec of (x, f(x)*Q <- BLS.sign(ID)) pairs
+// ///
+// pub fn interpolate_threshold_bls_sigs<E: EngineBLS>(
+//     points: Vec<(E::Scalar, E::SignatureGroup)>
+// ) -> E::SignatureGroup {
+//     let n = points.len();
+//     // Calculate the Lagrange basis polynomials evaluated at 0
+//     let mut interpolated_value = E::SignatureGroup::zero();
 
-    for i in 0..n {
-        // build \prod_{j=0}^n [j != i] (x-xj/xi - xj)
-        let mut basis_value = E::Scalar::one();
-        for j in 0..n {
-            if j != i {
-                let numerator = points[j].0;
-                let denominator = points[j].0 - points[i].0;
-                // Check if the denominator is zero before taking the inverse
-                if denominator.is_zero() {
-                    // Handle the case when the denominator is zero (or very close to zero)
-                    return E::SignatureGroup::zero();
-                }
-                basis_value *= numerator * denominator.inverse().unwrap();
-            }
-        }
-        interpolated_value += points[i].1 * basis_value;
-    }
+//     for i in 0..n {
+//         // build \prod_{j=0}^n [j != i] (x-xj/xi - xj)
+//         let mut basis_value = E::Scalar::one();
+//         for j in 0..n {
+//             if j != i {
+//                 let numerator = points[j].0;
+//                 let denominator = points[j].0 - points[i].0;
+//                 // Check if the denominator is zero before taking the inverse
+//                 if denominator.is_zero() {
+//                     // Handle the case when the denominator is zero (or very close to zero)
+//                     return E::SignatureGroup::zero();
+//                 }
+//                 basis_value *= numerator * denominator.inverse().unwrap();
+//             }
+//         }
+//         interpolated_value += points[i].1 * basis_value;
+//     }
 
-    interpolated_value
-}
+//     interpolated_value
+// }
 
 #[cfg(test)]
 mod test {
@@ -227,23 +220,22 @@ mod test {
 
     fn tlock_test<E: EngineBLS, R: Rng + Sized + CryptoRng>(
         n: u8,
-        t: u8,
         m: u8,
         inject_bad_ct: bool,
         inject_bad_nonce: bool,
         handler: &dyn Fn(TestStatusReport) -> (),
     ) {
-        // let mut rng = ChaCha20Rng::from_seed([4;32]);
         let message = b"this is a test message".to_vec();
         let id = Identity::new(b"id");
-        let (sk, shares) = generate_secrets::<E, OsRng>(n, t, &mut OsRng);
+        let sk = E::Scalar::rand(&mut OsRng);
         let p_pub = E::PublicKeyGroup::generator() * sk;
-        // let msk = SecretKey::<E>(sk);
-        let msk = SecretKey::<E>(E::Scalar::rand(&mut OsRng));
-        // e.g. s_1 * Q, s_2 * Q, ..., s_n * Q where Q = H_1(identity string)
-        let threshold_signatures = (0..m).map(|i| id.extract::<E>(shares[i as usize].1))
-            .collect();
-        match msk.encrypt(p_pub, &message, id, &mut OsRng) {
+
+        // key used for aes encryption
+        let msk = [1;32];
+        
+        let sig: E::SignatureGroup = id.extract::<E>(sk).0;
+
+        match tle::<E, OsRng>(p_pub, msk, &message, id, OsRng) {
             Ok(mut ct) => {
 
                 // create error scenarios here
@@ -255,7 +247,7 @@ mod test {
                     ct.aes_ct.nonce = vec![];
                 }
             
-                match ct.decrypt(threshold_signatures) {
+                match ct.tld(sig) {
                     Ok(output) => {
                         handler(TestStatusReport::DecryptSuccess{
                             actual: output.message, 
@@ -275,7 +267,7 @@ mod test {
 
     #[test]
     pub fn tlock_can_encrypt_decrypt_with_single_sig() {
-        tlock_test::<TinyBLS377, OsRng>(1, 1, 1, false, false,
+        tlock_test::<TinyBLS377, OsRng>(1, 1, false, false,
             &|status: TestStatusReport| {
                 match status {
                     TestStatusReport::DecryptSuccess{ actual, expected } => {
@@ -289,7 +281,7 @@ mod test {
 
     #[test]
     pub fn tlock_can_encrypt_decrypt_with_full_sigs_present() {
-        tlock_test::<TinyBLS377, OsRng>(5, 5, 5, false, false,
+        tlock_test::<TinyBLS377, OsRng>(5, 5, false, false,
             &|status: TestStatusReport| {
                 match status {
                     TestStatusReport::DecryptSuccess{ actual, expected } => {
@@ -303,7 +295,7 @@ mod test {
 
     #[test]
     pub fn tlock_can_encrypt_decrypt_with_many_identities_at_threshold() {
-        tlock_test::<TinyBLS377, OsRng>(5, 3, 3, false, false,
+        tlock_test::<TinyBLS377, OsRng>(5, 3, false, false,
             &|status: TestStatusReport| {
                 match status {
                     TestStatusReport::DecryptSuccess{ actual, expected } => {
@@ -315,24 +307,9 @@ mod test {
         );
     }
 
-    // this is equivalent to testing something like `tlock_decryption_fails_with_bad_sig`
-    #[test]
-    pub fn tlock_decryption_fails_with_less_than_threshold_sigs() {
-        tlock_test::<TinyBLS377, OsRng>(5, 3, 1, false, false,
-            &|status: TestStatusReport| {
-                match status {
-                    TestStatusReport::DecryptionFailed{ error } => {
-                        assert_eq!(error, ClientError::DecryptionError);
-                    },
-                    _ => panic!("all other conditions invalid"),
-                }
-            }
-        );
-    }
-
     #[test]
     pub fn tlock_decryption_fails_with_bad_ciphertext() {
-        tlock_test::<TinyBLS377, OsRng>(5, 5, 5, true, false,
+        tlock_test::<TinyBLS377, OsRng>(5, 5, true, false,
             &|status: TestStatusReport| {
                 match status {
                     TestStatusReport::DecryptionFailed{ error } => {
@@ -347,7 +324,7 @@ mod test {
     
     #[test]
     pub fn tlock_decryption_fails_with_bad_nonce() {
-        tlock_test::<TinyBLS377, OsRng>(5, 5, 5, false, true,
+        tlock_test::<TinyBLS377, OsRng>(5, 5, false, true,
             &|status: TestStatusReport| {
                 match status {
                     TestStatusReport::DecryptionFailed{ error } => {
@@ -359,76 +336,76 @@ mod test {
         );
     }
 
-    /// n: full committee size
-    /// t: the threshold value
-    /// m: the actual number of participants (who will submit signatures)
-    fn threshold_bls_interpolation_test<E: EngineBLS>(
-        n: u8,
-        t: u8,
-        m: u8,
-        handler: &dyn Fn(TestStatusReport) -> (),
-    ) {
-        let mut rng = ChaCha20Rng::from_seed([0;32]);
-        // essentially the message being signed
-        let id = Identity::new(b"id");
-        let (msk, shares) = generate_secrets::<E, ChaCha20Rng>(n, t, &mut rng);
-        // s * Q_{ID}, a BLS sig
-        let p_pub: IBESecret<E> = id.extract(msk);
-        // e.g. s_1 * Q, s_2 * Q, ..., s_n * Q where Q = H_1(identity string)
-        let threshold_signatures = (0..m).map(|i| 
-            (
-                shares[i as usize].0,
-                id.extract::<E>(shares[i as usize].1).0
-            )
-        ).collect();
-        let interpolated_sig = crate::utils::interpolate_threshold_bls::<E>(
-            threshold_signatures
-        );
+    // /// n: full committee size
+    // /// t: the threshold value
+    // /// m: the actual number of participants (who will submit signatures)
+    // fn threshold_bls_interpolation_test<E: EngineBLS>(
+    //     n: u8,
+    //     t: u8,
+    //     m: u8,
+    //     handler: &dyn Fn(TestStatusReport) -> (),
+    // ) {
+    //     let mut rng = ChaCha20Rng::from_seed([0;32]);
+    //     // essentially the message being signed
+    //     let id = Identity::new(b"id");
+    //     let (msk, shares) = generate_secrets::<E, ChaCha20Rng>(n, t, &mut rng);
+    //     // s * Q_{ID}, a BLS sig
+    //     let p_pub: IBESecret<E> = id.extract(msk);
+    //     // e.g. s_1 * Q, s_2 * Q, ..., s_n * Q where Q = H_1(identity string)
+    //     let threshold_signatures = (0..m).map(|i| 
+    //         (
+    //             shares[i as usize].0,
+    //             id.extract::<E>(shares[i as usize].1).0
+    //         )
+    //     ).collect();
+    //     let interpolated_sig = crate::utils::interpolate_threshold_bls::<E>(
+    //         threshold_signatures
+    //     );
 
-        handler(TestStatusReport::InterpolationComplete{ 
-            msk: crate::utils::convert_to_bytes::<E::SignatureGroup, 48>(p_pub.0).to_vec(), 
-            recovered_msk: crate::utils::convert_to_bytes::<E::SignatureGroup, 48>(
-                interpolated_sig
-            ).to_vec(),
-        });
-    }
+    //     handler(TestStatusReport::InterpolationComplete{ 
+    //         msk: crate::utils::convert_to_bytes::<E::SignatureGroup, 48>(p_pub.0).to_vec(), 
+    //         recovered_msk: crate::utils::convert_to_bytes::<E::SignatureGroup, 48>(
+    //             interpolated_sig
+    //         ).to_vec(),
+    //     });
+    // }
 
-    #[test]
-    pub fn test_threshold_bls_works_with_all_sigs_present() {
-        threshold_bls_interpolation_test::<TinyBLS377>(5, 5, 5,
-            &|status: TestStatusReport| {
-                match status {
-                    TestStatusReport::InterpolationComplete{ msk, recovered_msk } => {
-                        assert_eq!(recovered_msk, msk);
-                    },
-                    _ => panic!("all other conditions invalid"),
-                }
-            });
-    }
+    // #[test]
+    // pub fn test_threshold_bls_works_with_all_sigs_present() {
+    //     threshold_bls_interpolation_test::<TinyBLS377>(5, 5, 5,
+    //         &|status: TestStatusReport| {
+    //             match status {
+    //                 TestStatusReport::InterpolationComplete{ msk, recovered_msk } => {
+    //                     assert_eq!(recovered_msk, msk);
+    //                 },
+    //                 _ => panic!("all other conditions invalid"),
+    //             }
+    //         });
+    // }
     
-    #[test]
-    pub fn test_threshold_bls_works_with_threshold_sigs_present() {
-        threshold_bls_interpolation_test::<TinyBLS377>(5, 3, 3,
-            &|status: TestStatusReport| {
-                match status {
-                    TestStatusReport::InterpolationComplete{ msk, recovered_msk } => {
-                        assert_eq!(recovered_msk, msk);
-                    },
-                    _ => panic!("all other conditions invalid"),
-                }
-            });
-    }
+    // #[test]
+    // pub fn test_threshold_bls_works_with_threshold_sigs_present() {
+    //     threshold_bls_interpolation_test::<TinyBLS377>(5, 3, 3,
+    //         &|status: TestStatusReport| {
+    //             match status {
+    //                 TestStatusReport::InterpolationComplete{ msk, recovered_msk } => {
+    //                     assert_eq!(recovered_msk, msk);
+    //                 },
+    //                 _ => panic!("all other conditions invalid"),
+    //             }
+    //         });
+    // }
 
-    #[test]
-    pub fn test_threshold_bls_fails_with_less_than_threshold_sigs_present() {
-        threshold_bls_interpolation_test::<TinyBLS377>(5, 3, 2,
-            &|status: TestStatusReport| {
-                match status {
-                    TestStatusReport::InterpolationComplete{ msk, recovered_msk } => {
-                        assert!(recovered_msk != msk);
-                    },
-                    _ => panic!("all other conditions invalid"),
-                }
-            });
-    }
+    // #[test]
+    // pub fn test_threshold_bls_fails_with_less_than_threshold_sigs_present() {
+    //     threshold_bls_interpolation_test::<TinyBLS377>(5, 3, 2,
+    //         &|status: TestStatusReport| {
+    //             match status {
+    //                 TestStatusReport::InterpolationComplete{ msk, recovered_msk } => {
+    //                     assert!(recovered_msk != msk);
+    //                 },
+    //                 _ => panic!("all other conditions invalid"),
+    //             }
+    //         });
+    // }
 }
