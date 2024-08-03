@@ -65,21 +65,24 @@ For a ciphertext $C = \left <U, V, W\right >$ encrypted using the time slot $t$.
 
 ## Tlock
 
+This is a hybrid encryption scheme leveraging both AES_GCM and IBE encryption schemes.
+
 ### Encryption
 
 We want to encrypt a message $m \in \{0, 1\}^*$ for an identity $ID \in \{0, 1\}^*$ with some threshold $t > 0$.
 
-1. Choose $s \xleftarrow{R} \mathbb{Z}_p$ and broadcast $P_{pub} = sP$ where $P \in \mathbb{G}_2$ is a commonly agreed on generator. Also randomly sample a 96-bit nonce, $N$.
+1. Choose a secret key $s \xleftarrow{R} \{0,1\}^{32}$ and sample a 96-bit nonce, $N \xleftarrow{R} \{0,1\}^{96}$.
 2. Encrypt the message using AES-GCM, producing: $ct \leftarrow AES.Enc(m, s, N)$
-3. Encrypt the AES key for the identity using IBE: $ct' \leftarrow IBE.Enc(s, ID)$
+3. Encrypt the AES secret key for the identity using IBE: $ct' \leftarrow IBE.Enc(s, ID)$
 
-Then the ciphertext contains $(ct, ct')$.
+Then the ciphertext contains $(ct, ct', N)$.
 
 ### Decryption
 
 Timelock decryption can occur when a threshold of signers have produced valid BLS signatures for the given identity. 
 
-Given ciphertexts $(ct, ct')$, a nonce $N$ and an identity $ID$, decryption is as follows:
+Given ciphertexts $(ct, ct')$, a nonce $N$ and a secret key associated with an identity $ID$, decryption is as follows:
+
 1. Collect at least a thresold of BLS sigantures and DLEQ proofs. Interpolate the signatures and aggregate the proofs to get $(\sigma = interpolate(\{\sigma_i\}_{i \in [n]}), \pi = \sum_i \pi_i)$ and verify the proof. If it is invalid, then do not proceed.
 2. The signature $\sigma$ is the IBE secret associated with the public key $P_{pub}$. Then use the secret to decrypt the ciphertext $ct'$ to recover the AES key: $k \leftarrow IBE.Decrypt(P_{pub}, ct', \sigma)$. If decryption fails, then we stop.
 3. Use the recovered $k$ to attempt to decrypt the ciphertext $ct$: $m \leftarrow AES.Decrypt(ct, N, k)$.

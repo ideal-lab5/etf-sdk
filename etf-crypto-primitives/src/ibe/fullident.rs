@@ -25,7 +25,7 @@ use ark_std::vec::Vec;
 use serde::{Deserialize, Serialize};
 use crate::utils::{h2, h3_new, h4, cross_product_32};
 
-use w3f_bls::{EngineBLS, Message};
+use w3f_bls::EngineBLS;
 
 /// represents a ciphertext in the BF-IBE FullIdent scheme
 #[derive(Debug, Clone, PartialEq, CanonicalDeserialize, CanonicalSerialize, Serialize, Deserialize)]
@@ -43,15 +43,16 @@ pub enum IbeError {
     DecryptionFailed,
 }
 
-/// A type to represent an IBE identity (for which we will encrypt message)
+/// A type to represent an IBE identity
 #[derive(Debug, Clone)]
-pub struct Identity(pub Message);
+pub struct Identity(pub Vec<u8>);
 
 impl Identity {
 
     /// construct a new identity from a string
     pub fn new(identity: &[u8]) -> Self {
-        Self(Message::new(b"", identity))
+        // Self(Message::new(b"", identity))
+        Self(identity.to_vec())
     }
 
     /// the IBE extract function on a given secret key
@@ -62,7 +63,8 @@ impl Identity {
 
     /// derive the public key for this identity (hash to G1)
     pub fn public<E: EngineBLS>(&self) -> E::SignatureGroup {
-        self.0.hash_to_signature_curve::<E>()
+        // self.0.hash_to_signature_curve::<E>()
+        E::hash_to_signature_curve(&self.0[..])
     }
 
     /// BF-IBE encryption 
@@ -192,14 +194,14 @@ mod test {
         (msk, sk)
     }
 
-    #[test]
-    pub fn fullident_identity_construction_works() {
-        let id_string = b"example@test.com";
-        let identity = Identity::new(id_string);
+    // #[test]
+    // pub fn fullident_identity_construction_works() {
+    //     let id_string = b"example@test.com";
+    //     let identity = Identity::new(id_string);
         
-        let expected_message = Message::new(b"", id_string);
-        assert_eq!(identity.0, expected_message);
-    }
+    //     let expected_message = Message::new(b"", id_string);
+    //     assert_eq!(identity.0, expected_message);
+    // }
 
     #[test]
     pub fn fullident_encrypt_and_decrypt() {

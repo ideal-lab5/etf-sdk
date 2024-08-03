@@ -16,14 +16,6 @@
 use crate::{
     encryption::{aes, aes::AESOutput},
     ibe::fullident::{Identity, IBECiphertext, IBESecret},
-    utils::convert_to_bytes,
-};
-
-use ark_ff::{UniformRand, Field, One, Zero};
-use ark_poly::{
-    DenseUVPolynomial,
-    Polynomial,
-    univariate::DensePolynomial
 };
 
 use ark_serialize::CanonicalDeserialize;
@@ -66,47 +58,38 @@ pub enum ClientError {
     DeserializationErrorFr,
     DecryptionError,
     VectorDimensionMismatch,
+    InvalidSignature,
     Other,
 }
 
-// pub struct Tlock<E: EngineBLS> {
-//     _p: core::marker::PhantomData<E>,
+// /// construct a secret key from a scalar
+// pub fn new(sk: E::Scalar) -> Self {
+//     Self(sk)
 // }
 
-// can we make this not public? will do later on..
-// pub struct SecretKey<E: EngineBLS>(pub E::Scalar);
-
-// impl<E: EngineBLS> SecretKey<E> {
-
-    // /// construct a secret key from a scalar
-    // pub fn new(sk: E::Scalar) -> Self {
-    //     Self(sk)
-    // }
-
-    /// encrypt a message for an identity
-    ///
-    /// * `p_pub`: the public key commitment for the IBE system (i.e. the setup phase)
-    /// * `message`: The message to encrypt
-    /// * `id`: the identity to encrypt for
-    /// * `rng`: a CSPRNG
-    ///
+/// encrypt a message for an identity
+///
+/// * `p_pub`: the public key commitment for the IBE system (i.e. the setup phase)
+/// * `message`: The message to encrypt
+/// * `id`: the identity to encrypt for
+/// * `rng`: a CSPRNG
+///
 pub fn tle<E, R: Rng + CryptoRng + Sized>(
     p_pub: E::PublicKeyGroup,
-    secret_key: OpaqueSecretKey,
+    aes_secret_key: OpaqueSecretKey,
     message: &[u8],
     id: Identity,
     mut rng: R,
 ) -> Result<TLECiphertext<E>, ClientError> 
 where E: EngineBLS {
-    let ct_aes = aes::encrypt(message, secret_key, &mut rng)
+    let ct_aes = aes::encrypt(message, aes_secret_key, &mut rng)
         .map_err(|_| ClientError::AesEncryptError)?; // not sure how to test this line...
-    let ct: IBECiphertext<E> = id.encrypt(&secret_key, p_pub, &mut rng);
+    let ct: IBECiphertext<E> = id.encrypt(&aes_secret_key, p_pub, &mut rng);
     Ok(TLECiphertext {
         aes_ct: ct_aes, 
         etf_ct: ct
     })
 }
-// }
 
 impl<E: EngineBLS> TLECiphertext<E> {
     /// decrypt a ciphertext created as a result of timelock encryption
@@ -118,7 +101,7 @@ impl<E: EngineBLS> TLECiphertext<E> {
     ) -> Result<DecryptionResult, ClientError> {
         let secret_bytes = IBESecret(sig)
             .decrypt(&self.etf_ct)
-            .map_err(|_| ClientError::DecryptionError)?;
+            .map_err(|_| ClientError::InvalidSignature)?;
 
         let secret_array: [u8;32] = secret_bytes.clone().try_into()
             .unwrap_or([0u8;32]);
@@ -210,6 +193,7 @@ mod test {
     use ark_std::rand::SeedableRng;
     use rand_core::OsRng;
     use ark_ec::Group;
+    use ark_ff::UniformRand;
     
     // specific conditions that we want to test/verify
     enum TestStatusReport {
