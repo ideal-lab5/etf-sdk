@@ -10,12 +10,31 @@ function App() {
 
   useEffect(() => {
     console.log("component rendered or updated");
-    init().then(_ => {
+    init().then(async _ => {
+      let t = new TextEncoder();
+      let id = sha256(roundBuffer(VALID_TIXEL.round));
+      let message = t.encode(inputs.message);
+      // aes secret kye
+      let sk = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1];
+      // drand public key
+      let pp = hexToU8a(PUB_KEY);
+  
+      try {
+        // compute: ciphertext = tle(drand_id, message_to_encrypt, aes_secret_key, drand_public_key)
+        let ciphertext = encrypt(id, message, sk, pp);
+        let sig = hexToU8a(VALID_TIXEL.signature);
+        let plaintext = decrypt(ciphertext, sig);
+        console.log(plaintext)
+      } catch(e) {
+        console.error(e);
+      }
+      // await tle();
+      // await decrypt_endpoint();
     });
   }, [])
 
   const [inputs, setInputs] = useState({
-    message: '',
+    message: 'hello world',
     cipherText:'',
     decrypted_text: '',
     isEncrypted: false,

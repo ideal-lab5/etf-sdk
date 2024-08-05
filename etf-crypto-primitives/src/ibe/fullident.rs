@@ -22,6 +22,7 @@ use ark_std::{
     rand::Rng,
 };
 use ark_std::vec::Vec;
+use ark_ec::hashing::HashToCurve;
 use serde::{Deserialize, Serialize};
 use crate::utils::{h2, h3_new, h4, cross_product_32};
 
@@ -65,6 +66,11 @@ impl Identity {
     pub fn public<E: EngineBLS>(&self) -> E::SignatureGroup {
         // self.0.hash_to_signature_curve::<E>()
         E::hash_to_signature_curve(&self.0[..])
+        // let hasher = E::hash_to_curve_map();
+		// H(m) \in G_1
+		// let message_hash = hasher.hash(&self.0[..]).expect("testing");
+        // message_hash.into()
+			// .map_err(|e| format!("Failed to hash message: {}", e))?;
     }
 
     /// BF-IBE encryption 

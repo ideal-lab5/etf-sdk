@@ -103,7 +103,8 @@ impl<E: EngineBLS> TLECiphertext<E> {
             .decrypt(&self.etf_ct)
             .map_err(|_| ClientError::InvalidSignature)?;
 
-        let secret_array: [u8;32] = secret_bytes.clone().try_into()
+        let secret_array: [u8;32] = secret_bytes.clone()
+            .try_into()
             .unwrap_or([0u8;32]);
 
         if let Ok(plaintext) = aes::decrypt(AESOutput {
@@ -188,12 +189,56 @@ impl<E: EngineBLS> TLECiphertext<E> {
 mod test {
 
     use super::*;
+    use alloc::vec;
     use rand_chacha::ChaCha20Rng;
-    use w3f_bls::TinyBLS377;
+    use w3f_bls::{Signature, TinyBLS377, TinyBLS381};
     use ark_std::rand::SeedableRng;
     use rand_core::OsRng;
     use ark_ec::Group;
     use ark_ff::UniformRand;
+
+    use sha2::{Digest, Sha256};
+
+    use hex;
+
+    #[test]
+    fn delete_me() {
+        // private sk => public pk
+        // sig = sk.sign(msg) where msg = H_1(Sha256(round))
+        // then by encryptin for Sha256(round) we should be able to decrypt with the signature
+        // but it isn't working...
+
+        let pk_hex_str = "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a";
+        let round: u32 = 10024141; 
+        let sig_hex_str = "8c87caf26bb4f5e9fdfad5ddf739ff8683344f8cf04a8c381225ff067557b5d9d51937eed765fcef21971bf5ddef44bb";
+
+        let mut hasher = Sha256::default();
+        hasher.update(round.to_be_bytes());
+        let message = hasher.finalize().to_vec();
+
+        let mut pk_bytes = hex::decode(pk_hex_str).unwrap();
+        let sig_bytes = hex::decode(&sig_hex_str).unwrap();
+        // let message = b"this is a test message".to_vec();
+        let id = Identity::new(&message);
+        // let sk = E::Scalar::rand(&mut OsRng);
+        let p_pub = <TinyBLS381 as EngineBLS>::PublicKeyGroup::deserialize_compressed(&mut &pk_bytes[..]).unwrap();
+
+        // key used for aes encryption
+        let aes_sk = [1;32];
+        
+        let sig = <TinyBLS381 as EngineBLS>::SignatureGroup::deserialize_compressed(&mut &sig_bytes[..]).unwrap();
+        // let sig = id.extract::<TinyBLS381>(assk).0;
+        // sanity check: signature verification
+        assert!(Signature::<TinyBLS381>(sig).verify(
+            
+            // &w3f_bls::Message::new(b"", &round.to_be_bytes()), 
+            &w3f_bls::PublicKey(p_pub))
+        );
+
+
+        let ct: TLECiphertext<TinyBLS381> = tle(p_pub, aes_sk, &message, id, OsRng).unwrap();
+        let pt = ct.tld(sig).unwrap();
+    }
     
     // specific conditions that we want to test/verify
     enum TestStatusReport {
@@ -212,7 +257,7 @@ mod test {
         let message = b"this is a test message".to_vec();
         let id = Identity::new(b"id");
         let sk = E::Scalar::rand(&mut OsRng);
-        let p_pub = E::PublicKeyGroup::generator() * sk;
+        let p_pub: <E as EngineBLS>::PublicKeyGroup = E::PublicKeyGroup::generator() * sk;
 
         // key used for aes encryption
         let msk = [1;32];
