@@ -230,8 +230,7 @@ mod test {
         // let sig = id.extract::<TinyBLS381>(assk).0;
         // sanity check: signature verification
         assert!(Signature::<TinyBLS381>(sig).verify(
-            
-            // &w3f_bls::Message::new(b"", &round.to_be_bytes()), 
+            &w3f_bls::Message::new(b"", &round.to_be_bytes()), 
             &w3f_bls::PublicKey(p_pub))
         );
 
