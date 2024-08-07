@@ -26,7 +26,7 @@ use ark_ec::hashing::HashToCurve;
 use serde::{Deserialize, Serialize};
 use crate::utils::{h2, h3_new, h4, cross_product_32};
 
-use w3f_bls::EngineBLS;
+use w3f_bls::{EngineBLS, TinyBLS381};
 
 /// represents a ciphertext in the BF-IBE FullIdent scheme
 #[derive(Debug, Clone, PartialEq, CanonicalDeserialize, CanonicalSerialize, Serialize, Deserialize)]
@@ -52,7 +52,7 @@ impl Identity {
 
     /// construct a new identity from a string
     pub fn new(identity: &[u8]) -> Self {
-        // Self(Message::new(b"", identity))
+        // todo: maybe move hasher inside this function?
         Self(identity.to_vec())
     }
 
@@ -63,13 +63,15 @@ impl Identity {
     }
 
     /// derive the public key for this identity (hash to G1)
+    /// conceptually we can think of this like the function that derives the message
+    /// that is used in IBE.extract
     pub fn public<E: EngineBLS>(&self) -> E::SignatureGroup {
         // self.0.hash_to_signature_curve::<E>()
         E::hash_to_signature_curve(&self.0[..])
-        // let hasher = E::hash_to_curve_map();
+        // let hasher = TinyBLS381::hash_to_curve_map();
 		// H(m) \in G_1
 		// let message_hash = hasher.hash(&self.0[..]).expect("testing");
-        // message_hash.into()
+        // message_hash.into_group()
 			// .map_err(|e| format!("Failed to hash message: {}", e))?;
     }
 
@@ -96,7 +98,7 @@ impl Identity {
         let p = <<E as EngineBLS>::PublicKeyGroup as Group>::generator();
         // U = rP \in \mathbb{G}_1
         let u = p * r; 
-        // e(P_pub, Q_id)
+        // e(P_pub, Q_id) note this function specifies G1 = pubkey group, G2 = sig group
         let g_id = E::pairing(p_pub.mul(r), self.public::<E>());
         // sigma (+) H2(e(Q_id, P_pub))
         let v_rhs = h2(g_id);

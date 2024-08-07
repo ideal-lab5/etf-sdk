@@ -202,41 +202,85 @@ mod test {
     use hex;
 
     #[test]
-    fn delete_me() {
-        // private sk => public pk
-        // sig = sk.sign(msg) where msg = H_1(Sha256(round))
-        // then by encryptin for Sha256(round) we should be able to decrypt with the signature
-        // but it isn't working...
-
-        let pk_hex_str = "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a";
-        let round: u32 = 10024141; 
-        let sig_hex_str = "8c87caf26bb4f5e9fdfad5ddf739ff8683344f8cf04a8c381225ff067557b5d9d51937eed765fcef21971bf5ddef44bb";
+    fn this_passes() {
+        let round: u64 = 10028044;
 
         let mut hasher = Sha256::default();
         hasher.update(round.to_be_bytes());
         let message = hasher.finalize().to_vec();
 
-        let mut pk_bytes = hex::decode(pk_hex_str).unwrap();
-        let sig_bytes = hex::decode(&sig_hex_str).unwrap();
-        // let message = b"this is a test message".to_vec();
         let id = Identity::new(&message);
-        // let sk = E::Scalar::rand(&mut OsRng);
-        let p_pub = <TinyBLS381 as EngineBLS>::PublicKeyGroup::deserialize_compressed(&mut &pk_bytes[..]).unwrap();
+
+        let sk = <TinyBLS381 as EngineBLS>::Scalar::rand(&mut OsRng);
+        let p_pub: <TinyBLS381 as EngineBLS>::PublicKeyGroup = <TinyBLS381 as EngineBLS>::PublicKeyGroup::generator() * sk;
 
         // key used for aes encryption
         let aes_sk = [1;32];
         
-        let sig = <TinyBLS381 as EngineBLS>::SignatureGroup::deserialize_compressed(&mut &sig_bytes[..]).unwrap();
-        // let sig = id.extract::<TinyBLS381>(assk).0;
-        // sanity check: signature verification
-        assert!(Signature::<TinyBLS381>(sig).verify(
-            &w3f_bls::Message::new(b"", &round.to_be_bytes()), 
-            &w3f_bls::PublicKey(p_pub))
-        );
+        let sig: <TinyBLS381 as EngineBLS>::SignatureGroup = id.extract::<TinyBLS381>(sk).0;
+
+        let ct: IBECiphertext<TinyBLS381> = 
+            id.encrypt(&aes_sk, p_pub, &mut OsRng);
+
+        let ibe_sk: IBESecret<TinyBLS381> = IBESecret(sig);
+        let out = ibe_sk.decrypt(&ct).unwrap();
+        assert!(out.eq(&aes_sk));
+    }
+
+    use sp_crypto_hashing::{blake2_256, twox_64};
+
+    #[test]
+    fn delete_me() {
+        // sk \in Fr
+        // pk = sk * G \in G2
+        // sig = sk * H1(m) \in G1
+        // m = sha256(round)
+
+        // 96 bytes, in G2
+        let pk_hex_str = "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a";
+        let round: u64 = 999999;
+        // 48 bytes in G1
+        let sig_hex_str = "a03e74f4ec5dd8e4a55cb7a4c438db08fe32a250f1f7f239dcbca45e381fdcaf77c37959f1066c75d72bdb3ca0314f1e";
+
+        let secret_message = b"Hello, World!".to_vec();
+
+        let mut hasher = Sha256::default();
+        hasher.update(round.to_be_bytes());
+        let message = hasher.finalize().to_vec();
+
+        // let message = blake2_256(&round.to_be_bytes());
+        let mut pk_bytes = [0u8;96];
+        let mut sig_bytes = [0u8;48];
+        hex::decode_to_slice(pk_hex_str, &mut pk_bytes).unwrap();
+        hex::decode_to_slice(&sig_hex_str, &mut sig_bytes).unwrap();
+
+        let id = Identity::new(&message);
+        let p_pub = <TinyBLS381 as EngineBLS>::PublicKeyGroup::
+            deserialize_compressed(&mut &pk_bytes[..]).unwrap();
+
+        // key used for aes encryption
+        let aes_sk = [1;32];
+        
+        let sig = <TinyBLS381 as EngineBLS>::SignatureGroup::
+            deserialize_compressed(&mut &sig_bytes[..]).unwrap();
+
+        let ct: IBECiphertext<TinyBLS381> = 
+            id.encrypt(&aes_sk, p_pub, &mut OsRng);
+
+        let ibe_sk: IBESecret<TinyBLS381> = IBESecret(sig);
+        let out = ibe_sk.decrypt(&ct).unwrap();
 
 
-        let ct: TLECiphertext<TinyBLS381> = tle(p_pub, aes_sk, &message, id, OsRng).unwrap();
-        let pt = ct.tld(sig).unwrap();
+    
+        // let ct: TLECiphertext<TinyBLS381> = tle( 
+        //     p_pub,
+        //     aes_sk,
+        //     &secret_message,
+        //     id,
+        //     OsRng
+        // ).unwrap();
+
+        // let pt = ct.tld(sig).unwrap();
     }
     
     // specific conditions that we want to test/verify

@@ -44,6 +44,7 @@ ark-ed-on-bls12-381 = { version = "^0.4.0", default-features = false, features =
 rand_core = "0.6.4"
 simulacrum = "0.3.0"
 criterion = { version = "0.4", features = ["html_reports"] }
+sp-crypto-hashing = { git = "https://github.com/paritytech/polkadot-sdk.git" }
 
 [[bench]]
 name = "acss"
