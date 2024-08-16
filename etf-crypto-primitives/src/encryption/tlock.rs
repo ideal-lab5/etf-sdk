@@ -66,6 +66,7 @@ pub enum ClientError {
     DeserializationErrorFr,
     DecryptionError,
     VectorDimensionMismatch,
+    InvalidSignature,
     Other,
 }
 
@@ -118,9 +119,18 @@ impl<E: EngineBLS> TLECiphertext<E> {
     ) -> Result<DecryptionResult, ClientError> {
         let secret_bytes = IBESecret(sig)
             .decrypt(&self.etf_ct)
-            .map_err(|_| ClientError::DecryptionError)?;
+            .map_err(|_| ClientError::InvalidSignature)?;
 
-        let secret_array: [u8;32] = secret_bytes.clone().try_into()
+        return Self::aes_decrypt(&self, secret_bytes);
+    }
+    /// decrypt a ciphertext created as a result of timelock encryption.
+    /// requires user to know the secret key beforehand
+    pub fn aes_decrypt(&self, 
+        secret_bytes: Vec<u8>
+    ) -> Result<DecryptionResult, ClientError> {
+
+        let secret_array: [u8;32] = secret_bytes.clone()
+            .try_into()
             .unwrap_or([0u8;32]);
 
         if let Ok(plaintext) = aes::decrypt(AESOutput {
