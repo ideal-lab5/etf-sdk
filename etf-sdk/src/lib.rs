@@ -43,33 +43,25 @@ pub fn encrypt(
     // msk => master secret key
     let msk_bytes: [u8;32] = serde_wasm_bindgen::from_value(sk_js.clone())
         .map_err(|_| JsError::new("could not decode secret key"))?;
-    log("msk_bytes");
     let rng: ChaCha20Rng = ChaCha20Rng::from_seed(msk_bytes);
     // let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&msk_bytes.clone()).ok_or(JsError::new("Could not convert secret key"))?;
     // let secret_key = SecretKey::<TinyBLS377>(msk);
     let pp_conversion: Vec<u8> = serde_wasm_bindgen::from_value(p_pub_js.clone())
         .map_err(|_| JsError::new("could not decode p_pub"))?;
-    log("pp_conversion");
     let pp_bytes: [u8;144] = pp_conversion.try_into().map_err(|_| JsError::new("could not convert public params"))?;
-    log("pp_bytes");
     let double_pub_key = convert_from_bytes::<DoublePublicKey<TinyBLS377>, 144>(&pp_bytes.clone()).ok_or(JsError::new("Could not convert secret key"))?;
     let pp = double_pub_key.1;
     let id_bytes: Vec<u8> = serde_wasm_bindgen::from_value(id_js.clone())
         .map_err(|_| JsError::new("could not decode id"))?;
-    log("id_bytes");
     let identity = Identity::new(&id_bytes);
     let message_bytes: Vec<u8> = serde_wasm_bindgen::from_value(message_js.clone())
         .map_err(|_| JsError::new("could not decode message"))?;
-    log("message_bytes");
     let mut ciphertext_bytes: Vec<_> = Vec::new();
     // let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, rng).map_err(|_| JsError::new("encryption has failed"))?;
     let ciphertext: TLECiphertext<TinyBLS377> = tle(pp, msk_bytes, &message_bytes, identity, rng)
         .map_err(|_| JsError::new("encryption failed"))?;
-    log("ciphertext");
     
     ciphertext.serialize_compressed(&mut ciphertext_bytes).map_err(|_| JsError::new("ciphertext serialization has failed"))?;
-
-    log("cereal");
     
     serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert ciphertext to JsValue"))
 }
@@ -85,14 +77,11 @@ pub fn decrypt(
 
     let sig_conversion: Vec<u8> = serde_wasm_bindgen::from_value(sig_vec_js.clone())
          .map_err(|_| JsError::new("could not decode secret key"))?;
-        log("sig_converted");
     // let sig_value = sig_conversion.get(0).unwrap();
 
     let sig_bytes = sig_conversion.as_slice();
-    log("sig_bytes");
     let sig_point = <TinyBLS377 as EngineBLS>::SignatureGroup::deserialize_compressed(sig_bytes)
         .map_err(|_| JsError::new("could not deserialize sig_vec"))?;
-    log("sig_point");
     
     let ciphertext_vec: Vec<u8> = serde_wasm_bindgen::from_value(ciphertext_js.clone())
         .map_err(|_| JsError::new("could not decode ciphertext"))?;
@@ -100,10 +89,8 @@ pub fn decrypt(
 
     let ciphertext:TLECiphertext<TinyBLS377> = TLECiphertext::deserialize_compressed(ciphertext_bytes).map_err(|_| JsError::new("Could not deserialize ciphertext"))?;
     // let decrypt_result: DecryptionResult= ciphertext.decrypt(sig_vec).map_err(|_| JsError::new("decryption has failed"))?;
-    log("ciphertext for decrypt");
     let decrypt_result: DecryptionResult= ciphertext.tld(sig_point)
         .map_err(|e| JsError::new(&format!("decryption has failed {:?}", e)))?;
-    log("decrypted");
     let message: Vec<u8> = decrypt_result.message;
     let plaintext: String = String::from_utf8(message).map_err(|_| JsError::new("Plaintext could not be converted to a string"))?;
 
@@ -227,30 +214,26 @@ mod test {
         let identity_js: JsValue = serde_wasm_bindgen::to_value(&identity_vec).unwrap();
         let message_js: JsValue = serde_wasm_bindgen::to_value(&message).unwrap();
 
-        let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&sk.clone()).unwrap();
-        let msk2 = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&sk.clone()).unwrap();
+        let msk:<E as EngineBLS>::Scalar = convert_from_bytes::<<E as EngineBLS>::Scalar,32>(&sk.clone()).unwrap();
         let identity = Identity::new(&identity_vec);
 
-
-        let sig: IBESecret<TinyBLS377> = identity.extract(msk);
-        let sig2: E::SignatureGroup = identity.extract::<E>(msk2).0;
-        let sig_vec = vec![sig];
+        let sig: E::SignatureGroup = identity.extract::<E>(msk).0;
         let mut sig_bytes: Vec<_> = Vec::new();
+
         if succesful_decrypt {
-            sig_vec.serialize_compressed(&mut sig_bytes).unwrap();
+            // sig_vec.serialize_compressed(&mut sig_bytes).unwrap();
+            sig.serialize_compressed(&mut sig_bytes).unwrap();
+
         } else {
             let bad_ident_vec = b"bad_ident".to_vec();
             let bad_ident = Identity::new(&bad_ident_vec);
-            let bad_sig: IBESecret<TinyBLS377> = bad_ident.extract(msk);
+            let bad_sig: E::SignatureGroup = bad_ident.extract::<E>(msk).0;
             let bad_sig_vec = vec![bad_sig];
             bad_sig_vec.serialize_compressed(&mut sig_bytes).unwrap();
         }
         
         let sig_vec_js:JsValue = serde_wasm_bindgen::to_value(&sig_bytes).unwrap();
-        // let identity: Identity = Identity::new(&identity_vec);
-        // let sk_ident: <TinyBLS377 as EngineBLS>::Scalar
-        // let sk_ident = <TinyBLS377 as EngineBLS>::Scalar::deserialize_compressed(key_chain.sk);
-        // let sig: <TinyBLS377 as EngineBLS>::SignatureGroup = <TinyBLS377 as EngineBLS>::SignatureGroup::try_into(msk).unwrap();
+
         
 
         match encrypt(identity_js, message_js, sk_js, p_pub_js){
