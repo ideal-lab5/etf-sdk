@@ -18,7 +18,7 @@ use ark_serialize::CanonicalSerialize;
 use serde::Deserialize;
 use codec::Encode;
 use wasm_bindgen::prelude::*;
-use etf_crypto_primitives::{self, encryption::tlock::{DecryptionResult, SecretKey, TLECiphertext}, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
+use etf_crypto_primitives::{self, encryption::tlock::{DecryptionResult, TLECiphertext, tle}, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
 use w3f_bls::{EngineBLS, TinyBLS377};
 use rand_chacha::ChaCha20Rng;
 use ark_std::rand::SeedableRng;
@@ -26,7 +26,7 @@ use w3f_bls::{DoublePublicKey, DoublePublicKeyScheme};
 use serde::Serialize;
 use serde_big_array::BigArray;
 use ark_serialize::CanonicalDeserialize;
-use sp_consensus_beefy_etf::{Commitment, Payload, known_payloads};
+// use sp_consensus_beefy_etf::{Commitment, Payload, known_payloads};
 
 /// The encrypt wrapper used by the WASM blob to call tlock.rs encrypt function in etf-crypto-primitives
 /// * 'id_js': ID string for which the message will be encrypted
@@ -43,22 +43,33 @@ pub fn encrypt(
     // msk => master secret key
     let msk_bytes: [u8;32] = serde_wasm_bindgen::from_value(sk_js.clone())
         .map_err(|_| JsError::new("could not decode secret key"))?;
+    log("msk_bytes");
     let rng: ChaCha20Rng = ChaCha20Rng::from_seed(msk_bytes);
-    let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&msk_bytes.clone()).ok_or(JsError::new("Could not convert secret key"))?;
-    let secret_key = SecretKey::<TinyBLS377>(msk);
+    // let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&msk_bytes.clone()).ok_or(JsError::new("Could not convert secret key"))?;
+    // let secret_key = SecretKey::<TinyBLS377>(msk);
     let pp_conversion: Vec<u8> = serde_wasm_bindgen::from_value(p_pub_js.clone())
         .map_err(|_| JsError::new("could not decode p_pub"))?;
+    log("pp_conversion");
     let pp_bytes: [u8;144] = pp_conversion.try_into().map_err(|_| JsError::new("could not convert public params"))?;
+    log("pp_bytes");
     let double_pub_key = convert_from_bytes::<DoublePublicKey<TinyBLS377>, 144>(&pp_bytes.clone()).ok_or(JsError::new("Could not convert secret key"))?;
     let pp = double_pub_key.1;
     let id_bytes: Vec<u8> = serde_wasm_bindgen::from_value(id_js.clone())
         .map_err(|_| JsError::new("could not decode id"))?;
+    log("id_bytes");
     let identity = Identity::new(&id_bytes);
     let message_bytes: Vec<u8> = serde_wasm_bindgen::from_value(message_js.clone())
         .map_err(|_| JsError::new("could not decode message"))?;
+    log("message_bytes");
     let mut ciphertext_bytes: Vec<_> = Vec::new();
-    let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, rng).map_err(|_| JsError::new("encryption has failed"))?;
+    // let ciphertext = secret_key.encrypt(pp, &message_bytes, identity, rng).map_err(|_| JsError::new("encryption has failed"))?;
+    let ciphertext: TLECiphertext<TinyBLS377> = tle(pp, msk_bytes, &message_bytes, identity, rng)
+        .map_err(|_| JsError::new("encryption failed"))?;
+    log("ciphertext");
+    
     ciphertext.serialize_compressed(&mut ciphertext_bytes).map_err(|_| JsError::new("ciphertext serialization has failed"))?;
+
+    log("cereal");
     
     serde_wasm_bindgen::to_value(&ciphertext_bytes).map_err(|_| JsError::new("could not convert ciphertext to JsValue"))
 }
@@ -74,16 +85,25 @@ pub fn decrypt(
 
     let sig_conversion: Vec<u8> = serde_wasm_bindgen::from_value(sig_vec_js.clone())
          .map_err(|_| JsError::new("could not decode secret key"))?;
+        log("sig_converted");
+    // let sig_value = sig_conversion.get(0).unwrap();
 
     let sig_bytes = sig_conversion.as_slice();
-    let sig_vec: Vec<IBESecret<TinyBLS377>> = Vec::deserialize_compressed(sig_bytes).map_err(|_| JsError::new("could not deserialize sig_vec"))?;
+    log("sig_bytes");
+    let sig_point = <TinyBLS377 as EngineBLS>::SignatureGroup::deserialize_compressed(sig_bytes)
+        .map_err(|_| JsError::new("could not deserialize sig_vec"))?;
+    log("sig_point");
     
     let ciphertext_vec: Vec<u8> = serde_wasm_bindgen::from_value(ciphertext_js.clone())
         .map_err(|_| JsError::new("could not decode ciphertext"))?;
     let ciphertext_bytes: &[u8] = ciphertext_vec.as_slice();
 
     let ciphertext:TLECiphertext<TinyBLS377> = TLECiphertext::deserialize_compressed(ciphertext_bytes).map_err(|_| JsError::new("Could not deserialize ciphertext"))?;
-    let decrypt_result: DecryptionResult= ciphertext.decrypt(sig_vec).map_err(|_| JsError::new("decryption has failed"))?;
+    // let decrypt_result: DecryptionResult= ciphertext.decrypt(sig_vec).map_err(|_| JsError::new("decryption has failed"))?;
+    log("ciphertext for decrypt");
+    let decrypt_result: DecryptionResult= ciphertext.tld(sig_point)
+        .map_err(|e| JsError::new(&format!("decryption has failed {:?}", e)))?;
+    log("decrypted");
     let message: Vec<u8> = decrypt_result.message;
     let plaintext: String = String::from_utf8(message).map_err(|_| JsError::new("Plaintext could not be converted to a string"))?;
 
@@ -107,21 +127,21 @@ pub struct KeyChain {
 }
 
 /// build an encoded commitment for use in timelock encryption and sig verification
-#[wasm_bindgen]
-pub fn build_encoded_commitment(
-    block_number_js: JsValue, 
-    validator_set_id_js: JsValue,
-) -> Result<JsValue, JsError> {
-    let bn: u32 = serde_wasm_bindgen::from_value(block_number_js.clone())
-        .map_err(|_| JsError::new("could not decode a u32 from the input"))?;
-    let validator_set_id: u64 = serde_wasm_bindgen::from_value(validator_set_id_js.clone())
-        .map_err(|_| JsError::new("could not decode a u32 from the input"))?;
-    let payload = Payload::from_single_entry(known_payloads::ETF_SIGNATURE, Vec::new());
-    let commitment = Commitment { payload, block_number: bn, validator_set_id: validator_set_id };
-    let encoded = commitment.encode();
-    serde_wasm_bindgen::to_value(&encoded)
-        .map_err(|_| JsError::new("could not convert the encoded commitment to json"))
-}
+// #[wasm_bindgen]
+// pub fn build_encoded_commitment(
+//     block_number_js: JsValue, 
+//     validator_set_id_js: JsValue,
+// ) -> Result<JsValue, JsError> {
+//     let bn: u32 = serde_wasm_bindgen::from_value(block_number_js.clone())
+//         .map_err(|_| JsError::new("could not decode a u32 from the input"))?;
+//     let validator_set_id: u64 = serde_wasm_bindgen::from_value(validator_set_id_js.clone())
+//         .map_err(|_| JsError::new("could not decode a u32 from the input"))?;
+//     let payload = Payload::from_single_entry(known_payloads::ETF_SIGNATURE, Vec::new());
+//     let commitment = Commitment { payload, block_number: bn, validator_set_id: validator_set_id };
+//     let encoded = commitment.encode();
+//     serde_wasm_bindgen::to_value(&encoded)
+//         .map_err(|_| JsError::new("could not convert the encoded commitment to json"))
+// }
 
 /// This function is used purely for testing purposes. 
 /// It takes in a seed and generates a secret key and public params.
@@ -171,7 +191,7 @@ mod test {
     use wasm_bindgen_test::*;
     use w3f_bls::{
         EngineBLS,
-        TinyBLS377,
+        TinyBLS377, BLS377,
     };
 
     enum TestStatusReport {
@@ -208,10 +228,12 @@ mod test {
         let message_js: JsValue = serde_wasm_bindgen::to_value(&message).unwrap();
 
         let msk = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&sk.clone()).unwrap();
+        let msk2 = convert_from_bytes::<<TinyBLS377 as EngineBLS>::Scalar,32>(&sk.clone()).unwrap();
         let identity = Identity::new(&identity_vec);
 
 
         let sig: IBESecret<TinyBLS377> = identity.extract(msk);
+        let sig2: E::SignatureGroup = identity.extract::<E>(msk2).0;
         let sig_vec = vec![sig];
         let mut sig_bytes: Vec<_> = Vec::new();
         if succesful_decrypt {
@@ -225,6 +247,11 @@ mod test {
         }
         
         let sig_vec_js:JsValue = serde_wasm_bindgen::to_value(&sig_bytes).unwrap();
+        // let identity: Identity = Identity::new(&identity_vec);
+        // let sk_ident: <TinyBLS377 as EngineBLS>::Scalar
+        // let sk_ident = <TinyBLS377 as EngineBLS>::Scalar::deserialize_compressed(key_chain.sk);
+        // let sig: <TinyBLS377 as EngineBLS>::SignatureGroup = <TinyBLS377 as EngineBLS>::SignatureGroup::try_into(msk).unwrap();
+        
 
         match encrypt(identity_js, message_js, sk_js, p_pub_js){
             Ok(ciphertext) => {
@@ -301,16 +328,16 @@ mod test {
         })
     }
 
-    #[wasm_bindgen_test]
-    pub fn can_build_encoded_commitment() {
-        let bn = serde_wasm_bindgen::to_value(1).unwrap();
-        let vsid = serde_wasm_bindgen::to_value(2).unwrap();
+    // #[wasm_bindgen_test]
+    // pub fn can_build_encoded_commitment() {
+    //     let bn = serde_wasm_bindgen::to_value(1).unwrap();
+    //     let vsid = serde_wasm_bindgen::to_value(2).unwrap();
 
-        if let Ok(val) = build_encoded_commitment(bn, vsid) {
-            assert_eq!(vec![0], val);
-        } else {
-            panic!("The test should pass");
-        }
-    }
+    //     if let Ok(val) = build_encoded_commitment(bn, vsid) {
+    //         assert_eq!(vec![0], val);
+    //     } else {
+    //         panic!("The test should pass");
+    //     }
+    // }
         
 }
