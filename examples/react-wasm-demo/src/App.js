@@ -30,7 +30,7 @@ function App() {
     }));
 };
 
-  function encrypt_endpoint() {
+  function encrypt() {
 
     let t = new TextEncoder();
     let id = t.encode(build_encoded_commitment(parseInt(inputs.id), 1));
@@ -44,7 +44,7 @@ function App() {
       let sk = kc.sk;
       let pp = kc.double_public;
 
-      console.log("Encrypting");
+      console.log("Encrypting for 1 block from now...");
       let new_cipherText = encrypt(id, message, sk, pp);
       // update state so decrypt button is shown
       setInputs((prevInputs) => ({
@@ -60,7 +60,7 @@ function App() {
     
   }
 
-  function decrypt_endpoint() {
+  function decrypt() {
     let t = new TextEncoder();
     let seed = t.encode(inputs.seed);
     let kc = generate_keys(seed);
@@ -90,7 +90,7 @@ function App() {
           <div><input name = "seed" value={inputs.seed} type="text" onChange={handleChange}/></div>
           <label>Message to Encrypt</label>
           <div><input name = "message" value={inputs.message} type="text" onChange={handleChange}/></div>
-          <button onClick={() => encrypt_endpoint()}>Encrypt message</button>
+          <button onClick={() => encrypt()}>Encrypt message</button>
           <div>
             {inputs.isEncrypted? (
               <div>
@@ -102,7 +102,7 @@ function App() {
                   </p>
                 </div>
                 <div>
-                    <button onClick={() => decrypt_endpoint()}>Decrypt</button>
+                    <button onClick={() => decrypt()}>Decrypt</button>
                 </div>
               </div>
             ) : null}
