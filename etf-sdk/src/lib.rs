@@ -18,7 +18,7 @@ use ark_serialize::CanonicalSerialize;
 use serde::Deserialize;
 use codec::Encode;
 use wasm_bindgen::prelude::*;
-use etf_crypto_primitives::{self, encryption::tlock::{DecryptionResult, TLECiphertext, tle}, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
+use etf_crypto_primitives::{self, encryption::tlock::{DecryptionResult, TLECiphertext, tle as timelock_encrypt}, ibe::fullident::{IBESecret, Identity}, utils::{self, *}};
 use w3f_bls::{EngineBLS, TinyBLS377};
 use rand_chacha::ChaCha20Rng;
 use ark_std::rand::SeedableRng;
@@ -34,7 +34,7 @@ use sp_consensus_beefy_etf::{Commitment, Payload, known_payloads};
 /// * 'sk_js': secret key passed in from UI. This should be obtained elsewhere later on.
 /// * 'p_pub_js': the public key commitment for the IBE system
 #[wasm_bindgen]
-pub fn encrypt( 
+pub fn tle( 
     id_js: JsValue,
     message_js: JsValue, // &[u8]
     sk_js: JsValue,
@@ -60,7 +60,7 @@ pub fn encrypt(
         .map_err(|_| JsError::new("could not decode message"))?;
 
     let mut ciphertext_bytes: Vec<_> = Vec::new();
-    let ciphertext: TLECiphertext<TinyBLS377> = tle(pp, msk_bytes, &message_bytes, identity, rng)
+    let ciphertext: TLECiphertext<TinyBLS377> = timelock_encrypt(pp, msk_bytes, &message_bytes, identity, rng)
         .map_err(|_| JsError::new("encryption failed"))?;
     
     ciphertext.serialize_compressed(&mut ciphertext_bytes)
@@ -74,7 +74,7 @@ pub fn encrypt(
 /// * 'ciphertext_js': The string to be decrypted
 /// * 'sig_vec_js': The array of BLS signatures required to rebuild the secret key and decrypt the message
 #[wasm_bindgen]
-pub fn decrypt(
+pub fn tld(
     ciphertext_js: JsValue,
     sig_vec_js: JsValue
 ) -> Result<JsValue, JsError>{
@@ -200,7 +200,7 @@ pub fn extract_signature(id: JsValue, sk_js: JsValue) -> Result<JsValue, JsError
         .map_err(|_| JsError::new("Could not convert id to vec"))?;
     let identity = Identity::new(&identity_vec);
 
-
+    // equivalent to msk.sign(message) fyi
     let sig: IBESecret<TinyBLS377> = identity.extract(msk);
     let sig_vec = vec![sig];
     let mut sig_bytes: Vec<_> = Vec::new();
@@ -284,13 +284,13 @@ mod test {
         let sig_vec_js:JsValue = serde_wasm_bindgen::to_value(&sig_bytes).unwrap();
 
         if standard_tle {
-            match encrypt(identity_js, message_js, sk_js, p_pub_js){
+            match tle(identity_js, message_js, sk_js, p_pub_js){
                 Ok(ciphertext) => {
                     let ciphertext_clone = ciphertext.clone();
                     handler(TestStatusReport::EncryptSuccess{
                         ciphertext
                     });
-                    match decrypt(ciphertext_clone, sig_vec_js){
+                    match tld(ciphertext_clone, sig_vec_js){
                         Ok(plaintext) => {
                             handler(TestStatusReport::DecryptSuccess { 
                                 plaintext 
@@ -311,7 +311,7 @@ mod test {
             }
 
         } else {
-            match encrypt(identity_js, message_js, sk_js, p_pub_js){
+            match tle(identity_js, message_js, sk_js, p_pub_js){
                 Ok(ciphertext) => {
                     let sk_js_early: JsValue = serde_wasm_bindgen::to_value(&sk_bytes).unwrap();
                     let ciphertext_clone = ciphertext.clone();
@@ -339,10 +339,6 @@ mod test {
             }
             
         }
-
-        
-
-
     }
 
     #[wasm_bindgen_test]
