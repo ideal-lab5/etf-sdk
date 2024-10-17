@@ -32,7 +32,7 @@ use crate::{
     encryption::hashed_el_gamal::HashedElGamal,
     proofs::hashed_el_gamal_sigma::BatchPoK,
 };
-use w3f_bls::{EngineBLS, KeypairVT, PublicKey};
+use w3f_bls::{DoublePublicKey, DoublePublicKeyScheme, EngineBLS, KeypairVT, PublicKey, SecretKeyVT};
 
 /// errors for the ACSS algorithm
 #[derive(Debug, PartialEq)]
@@ -66,7 +66,7 @@ impl <E: EngineBLS> DoubleSecret<E> {
         committee: &[PublicKey<E>], 
         t: u8, 
         mut rng: R
-    ) -> Result<Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
+    ) -> Result<Vec<(DoublePublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
             HighThresholdACSS::<E>::reshare(
                 self.0, self.1,
                 committee, t, &mut rng
@@ -116,7 +116,7 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
         committee: &[PublicKey<E>],
         t: u8,
         mut rng: R,
-    ) -> Result<Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
+    ) -> Result<Vec<(DoublePublicKey<E>, BatchPoK<E::PublicKeyGroup>)>, ACSSError> {
 
         if committee.is_empty() {
             return Err(ACSSError::InvalidCommittee);
@@ -129,12 +129,14 @@ impl<E: EngineBLS> HighThresholdACSS<E> {
         let evals_hat: BTreeMap<E::Scalar, E::Scalar> = generate_shares_checked::<E, R>(
             msk_hat, committee.len() as u8, t, &mut rng);
 
-        let mut poks: Vec<(PublicKey<E>, BatchPoK<E::PublicKeyGroup>)> = Vec::new();
+        let mut poks: Vec<(DoublePublicKey<E>, BatchPoK<E::PublicKeyGroup>)> = Vec::new();
         for (pk, (u, u_hat)) in committee.iter()
             .zip(evals.iter()
             .zip(evals_hat.iter())) {
             if let Ok(pok) = BatchPoK::prove(&[*u.1, *u_hat.1], pk.0, &mut rng) {
-                poks.push((*pk, pok));
+                // lets get a public key while we're at it...
+                let etf_pk = SecretKeyVT::<E>(*u.1).into_double_public_key();
+                poks.push((etf_pk, pok));
             } else {
                 return Err(ACSSError::InvalidMessage)
             }
@@ -277,18 +279,20 @@ pub mod tests {
 
         let initial_committee_public_keys = keys.iter().map(|kp| kp.public).collect::<Vec<_>>();
 
-        let mock_bad_resharing = (
-            PublicKey(E::PublicKeyGroup::generator()), 
+        let mock_bad_resharing =
             BatchPoK::prove(
                 &vec![E::Scalar::one(), E::Scalar::one()], 
                 E::PublicKeyGroup::generator(), 
                 test_rng()
-            ).unwrap()
-        );
+            ).unwrap();
+        // );
 
         match double_secret.reshare(initial_committee_public_keys.as_slice(), t, &mut rng) {
             Ok(mut resharing) => {
-
+                let mut poks: Vec<BatchPoK<E::PublicKeyGroup>> = resharing
+                    .iter()
+                    .map(|r| r.1.clone())
+                    .collect();
                 if resharing.is_empty() {
                     handler(TestStatusReport::ReshareSoftFail{ size: resharing.len() as u8 });
 
@@ -297,9 +301,9 @@ pub mod tests {
                     }
                 } else {
                     // only the first `num_valid_pok` are valid, the rest are invalid 
-                    resharing = resharing[0..num_valid_pok as usize].to_vec();
+                    poks = poks[0..num_valid_pok as usize].to_vec();
                     (num_valid_pok..num_actual_signers)
-                        .for_each(|_| resharing.push(mock_bad_resharing.clone()));
+                        .for_each(|_| poks.push(mock_bad_resharing.clone()));
                 }
 
                 let mut recovered_shares: Vec<DoubleSecret<E>> = Vec::new();
@@ -309,7 +313,7 @@ pub mod tests {
                 keys.iter().enumerate().for_each(|(idx, kp)| {
 
                     let w = Keypair(kp.into_vartime());
-                    let r = resharing[idx].1.clone();
+                    let r = poks[idx].clone();
 
                     match w.recover(r, t) {
                         Ok(recovered_share) => {

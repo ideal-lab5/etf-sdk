@@ -33,7 +33,7 @@ Output the ciphertext $C$.
 To decrypt a ciphertext $C$ under a valid secret key $d$, perform the following operations:
 
 1. Calculate $s = dU$
-2. Calculate $m = W \oplus H(s)$
+2. Calculate $m = V \oplus H(s)$
 
 output $m$
 
@@ -53,7 +53,7 @@ The goal is that, given a secret $s$:
 
 This protocol is very similar to a DLEQ proof, as it is a Sigma protocol with a Fiat-Shamir transform applied to it.
 
-Given a private input $m \in \mathbb{Z}_p$ and public inputs $P, Q \in \mathbb{G}$ where $P$ is a generator and $Q = sP$ is a public key with corresponding secret $s$.
+Given a private input $m \in \mathbb{Z}_p$ and public inputs $P, Q \in \mathbb{G}$ where $P$ is a generator and $Q = msk * P$ is a public key with corresponding secret $msk$.
 
 There are two stages: first we prepare the ciphertext and commitment, and then we prepare the proof.
 

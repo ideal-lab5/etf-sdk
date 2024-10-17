@@ -144,7 +144,7 @@ pub fn interpolate_threshold_bls<E: EngineBLS>(
 }
 
 /// interpolate a polynomial from the input and evaluate it at 0
-/// P(X) = sum_{i = 0} ^n y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj))
+/// P(X) = sum_{i = 0} ^n y_i * (\prod_{j=0}^n [j != i] (x-xj/xi - xj))hegs
 ///
 /// * `evalulation`: a vec of (x, f(x)) pairs
 ///
