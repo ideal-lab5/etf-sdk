@@ -84,7 +84,6 @@ pub fn decrypt(
     // lets check the nonce... not great way to do it but ok for now
     // TODO:get a valid nonce size as a constant
     if ct.nonce.len() != 12 {
-        // panic!("{:?}", ct.nonce.len());
         return Err(Error::BadNonce);
     }
     let nonce = Nonce::from_slice(&ct.nonce);

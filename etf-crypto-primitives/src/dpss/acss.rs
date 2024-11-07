@@ -29,7 +29,7 @@ use ark_std::{
     collections::BTreeMap,
 };
 use crate::{
-    encryption::hashed_el_gamal::HashedElGamal,
+    tlock::hashed_el_gamal::HashedElGamal,
     proofs::hashed_el_gamal_sigma::BatchPoK,
 };
 use w3f_bls::{DoublePublicKey, DoublePublicKeyScheme, EngineBLS, KeypairVT, PublicKey, SecretKeyVT};
@@ -239,7 +239,7 @@ pub mod tests {
 
     use crate::utils::convert_to_bytes;
 
-    use w3f_bls::{Keypair, PublicKey, TinyBLS377};
+    use w3f_bls::{Keypair, TinyBLS377};
 
     #[derive(Debug, PartialEq)]
     enum TestStatusReport {
@@ -288,7 +288,7 @@ pub mod tests {
         // );
 
         match double_secret.reshare(initial_committee_public_keys.as_slice(), t, &mut rng) {
-            Ok(mut resharing) => {
+            Ok(resharing) => {
                 let mut poks: Vec<BatchPoK<E::PublicKeyGroup>> = resharing
                     .iter()
                     .map(|r| r.1.clone())

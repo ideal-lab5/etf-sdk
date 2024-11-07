@@ -24,7 +24,7 @@ use sha3::{
 };
 use serde::{Deserialize, Serialize};
 use crate::{
-    encryption::hashed_el_gamal::{Ciphertext, HashedElGamal},
+    tlock::hashed_el_gamal::{Ciphertext, HashedElGamal},
     ser::{ark_de, ark_se},
 };
 
