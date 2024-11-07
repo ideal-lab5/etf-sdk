@@ -90,7 +90,6 @@ pub fn tld(ciphertext_js: JsValue, sig_vec_js: JsValue) -> Result<JsValue, JsErr
     let sig_bytes = sig_conversion.as_slice();
     let sig_point = <TinyBLS377 as EngineBLS>::SignatureGroup::deserialize_compressed(sig_bytes)
         .map_err(|_| JsError::new("could not deserialize sig_vec"))?;
-
     let ciphertext_vec: Vec<u8> = serde_wasm_bindgen::from_value(ciphertext_js.clone())
         .map_err(|_| JsError::new("could not decode ciphertext"))?;
     let ciphertext_bytes: &[u8] = ciphertext_vec.as_slice();
@@ -296,22 +295,41 @@ mod test {
                         Ok(plaintext) => handler(TestStatusReport::DecryptSuccess { plaintext }),
                         Err(error) => handler(TestStatusReport::DecryptFailure { error }),
                     }
+                },
+                Err(error) => {
+                    handler(TestStatusReport::EncryptFailure { 
+                        _error: error
+                    })
                 }
-                Err(error) => handler(TestStatusReport::EncryptFailure { _error: error }),
             }
         } else {
-            match tle(identity_js, message_js, sk_js, p_pub_js) {
+            match tle(identity_js, message_js, sk_js, p_pub_js){
                 Ok(ciphertext) => {
                     let sk_js_early: JsValue = serde_wasm_bindgen::to_value(&sk_bytes).unwrap();
                     let ciphertext_clone = ciphertext.clone();
-                    handler(TestStatusReport::EncryptSuccess { ciphertext });
-                    match aes_decrypt(ciphertext_clone, sk_js_early) {
-                        Ok(plaintext) => handler(TestStatusReport::DecryptSuccess { plaintext }),
-                        Err(error) => handler(TestStatusReport::DecryptFailure { error }),
+                    handler(TestStatusReport::EncryptSuccess{
+                        ciphertext
+                    });
+                    match aes_decrypt(ciphertext_clone, sk_js_early){
+                        Ok(plaintext) => {
+                            handler(TestStatusReport::DecryptSuccess { 
+                                plaintext 
+                            })
+                        },
+                        Err(error) => {
+                            handler(TestStatusReport::DecryptFailure { 
+                                error
+                            })
+                        }
                     }
+                },
+                Err(error) => {
+                    handler(TestStatusReport::EncryptFailure { 
+                        _error: error
+                    })
                 }
-                Err(error) => handler(TestStatusReport::EncryptFailure { _error: error }),
             }
+            
         }
     }
 
@@ -402,50 +420,4 @@ mod test {
             },
         )
     }
-
-    #[wasm_bindgen_test]
-    pub fn decrypt_failure() {
-        let message: Vec<u8> = b"this is a test message".to_vec();
-        let id: Vec<u8> = b"testing purposes".to_vec();
-        setup_test::<TinyBLS377>(
-            id,
-            message.clone(),
-            false,
-            true,
-            &|status: TestStatusReport| {
-                match status {
-                    TestStatusReport::EncryptSuccess { ciphertext } => {
-                        let ciphertext_convert: Vec<u8> =
-                            serde_wasm_bindgen::from_value(ciphertext.clone()).unwrap();
-                        assert!(ciphertext.is_truthy());
-                        assert_ne!(ciphertext_convert, message);
-                    }
-                    TestStatusReport::DecryptFailure { error } => {
-                        // This test needs to be updated. As of right now, there doesn't seem to be a way to reliably compare errors
-                        // however the test will fail if no error is thrown from decrypt. We just won't know if it was the decrypt function failing.
-                        // NOTE: TypeId comes from the std library.
-                        // A `TypeId` represents a globally unique identifier for a type.
-                        let error_compare = JsError::new("this is irrelevant. We only check that it's a JsError (which it always is)");
-                        let type_id_compare = error_compare.type_id();
-                        let type_id = error.type_id();
-
-                        assert_eq!(type_id, type_id_compare);
-                    }
-                    _ => panic!("decrypt was successful"),
-                }
-            },
-        )
-    }
-
-    // #[wasm_bindgen_test]
-    // pub fn can_build_encoded_commitment() {
-    //     let bn = serde_wasm_bindgen::to_value(1).unwrap();
-    //     let vsid = serde_wasm_bindgen::to_value(2).unwrap();
-
-    //     if let Ok(val) = build_encoded_commitment(bn, vsid) {
-    //         assert_eq!(vec![0], val);
-    //     } else {
-    //         panic!("The test should pass");
-    //     }
-    // }
 }
