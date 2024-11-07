@@ -24,7 +24,7 @@ fn tlock_tinybls377<E: EngineBLS>(
 
 fn tlock_dynamic_commitee_static_data(c: &mut Criterion) {
     static KB: usize = 1024;
-    let id = Identity::new(b"test");
+    let id = Identity::new(b"", vec![b"test".to_vec()]);
 
     let mut group = c.benchmark_group("tlock_dynamic_commitee_static_data");
     for size in [3, 5, 10, 20, 50, 100].iter() {

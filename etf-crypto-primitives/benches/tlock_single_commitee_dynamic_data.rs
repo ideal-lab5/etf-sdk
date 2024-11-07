@@ -27,7 +27,7 @@ fn tlock_single_commitee_dynamic_data(c: &mut Criterion) {
 
     let s = <TinyBLS377 as EngineBLS>::Scalar::rand(&mut OsRng);
     let p_pub = <TinyBLS377 as EngineBLS>::PublicKeyGroup::generator() * s;
-    let id = Identity::new(b"test");
+    let id = Identity::new(b"", vec![b"test".to_vec()]);
     let msk = <TinyBLS377 as EngineBLS>::Scalar::rand(&mut OsRng);
 
     let mut group = c.benchmark_group("tlock_single_commitee_dynamic_data");

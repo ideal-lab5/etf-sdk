@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use ark_ff::UniformRand;
+use ark_ff::{UniformRand, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_ec::Group;
 use ark_std::{
@@ -45,15 +45,18 @@ pub enum IbeError {
 
 /// A type to represent an IBE identity (for which we will encrypt message)
 #[derive(Debug, Clone)]
-pub struct Identity(pub Message);
+pub struct Identity(pub Vec<Message>);
 
 impl Identity {
 
     /// construct a new identity from a string
-    pub fn new(identity: &[u8]) -> Self {
-        Self(Message::new(b"", identity))
+    pub fn new(ctx: &[u8], identities: Vec<Vec<u8>>) -> Self {
+        Self (
+            identities.iter()
+                .map(|identity| Message::new(ctx, &identity))
+                .collect::<Vec<_>>()
+            )
     }
-
     /// the IBE extract function on a given secret key
     /// this is essentially a BLS signature
     pub fn extract<E: EngineBLS>(&self, sk: E::Scalar) -> IBESecret<E> {
@@ -62,7 +65,10 @@ impl Identity {
 
     /// derive the public key for this identity (hash to G1)
     pub fn public<E: EngineBLS>(&self) -> E::SignatureGroup {
-        self.0.hash_to_signature_curve::<E>()
+        self.0.iter()
+            .map(|message| message.hash_to_signature_curve::<E>())
+            .fold(E::SignatureGroup::zero(), |acc, val| acc + val)
+
     }
 
     /// BF-IBE encryption 
@@ -90,7 +96,7 @@ impl Identity {
         let u = p * r; 
         // e(P_pub, Q_id)
         let g_id = E::pairing(p_pub.mul(r), self.public::<E>());
-        // sigma (+) H2(e(Q_id, P_pub))
+        // sigma (+) H2(e(P_pub, Q_id))
         let v_rhs = h2(g_id);
         let v_out = cross_product_32(&sigma, &v_rhs);
         // message (+) H4(sigma)
@@ -137,10 +143,11 @@ impl<E: EngineBLS> IBESecret<E> {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
-    
     use w3f_bls::TinyBLS377;
     use ark_std::{test_rng, UniformRand};
+    
 
     // this enum represents the conditions or branches that I want to test
     enum TestStatusReport {
@@ -195,16 +202,16 @@ mod test {
     #[test]
     pub fn fullident_identity_construction_works() {
         let id_string = b"example@test.com";
-        let identity = Identity::new(id_string);
+        let identity = Identity::new(b"", vec![id_string.to_vec()]);
         
         let expected_message = Message::new(b"", id_string);
-        assert_eq!(identity.0, expected_message);
+        assert_eq!(identity.0[0], expected_message);
     }
 
     #[test]
     pub fn fullident_encrypt_and_decrypt() {
         let id_string = b"example@test.com";
-        let identity = Identity::new(id_string);
+        let identity = Identity::new(b"", vec![id_string.to_vec()]);
         let message: [u8;32] = [2;32];
 
         run_test::<TinyBLS377>(
@@ -223,7 +230,7 @@ mod test {
     #[test]
     pub fn fullident_decryption_fails_with_bad_ciphertext() {
         let id_string = b"example@test.com";
-        let identity = Identity::new(id_string);
+        let identity = Identity::new(b"", vec![id_string.to_vec()]);
         let message: [u8;32] = [2;32];
 
         run_test::<TinyBLS377>(
@@ -244,7 +251,7 @@ mod test {
     #[test]
     pub fn fullident_decryption_fails_with_bad_key() {
         let id_string = b"example@test.com";
-        let identity = Identity::new(id_string);
+        let identity = Identity::new(b"", vec![id_string.to_vec()]);
         let message: [u8;32] = [2;32];
 
         run_test::<TinyBLS377>(
@@ -258,5 +265,4 @@ mod test {
             }
         });
     }
-
 }

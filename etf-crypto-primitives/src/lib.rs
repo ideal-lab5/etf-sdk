@@ -34,7 +34,7 @@
 extern crate alloc;
 
 pub mod utils;
-pub mod encryption;
+pub mod tlock;
 pub mod ibe;
 pub mod proofs;
 pub mod dpss;
