@@ -301,6 +301,7 @@ mod test {
                         _error: error
                     })
                 }
+                Err(_error) => handler(TestStatusReport::EncryptFailure { _error: _error }),
             }
         } else {
             match tle(identity_js, message_js, sk_js, p_pub_js){

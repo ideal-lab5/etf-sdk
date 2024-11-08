@@ -66,7 +66,7 @@ pub fn encrypt<R: Rng + CryptoRng + Sized>(
     Ok(AESOutput{
         ciphertext: buffer,
         nonce: nonce.to_vec(),
-        key: key.to_vec(),
+        key: key.to_vec(), // TODO: remove key from AESOutput struct
     })
 }
 

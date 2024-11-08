@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
+pub mod drand_bls_381_quicknet;
 pub mod aes;
 pub mod hashed_el_gamal;
 pub mod tlock;
