@@ -132,6 +132,10 @@ mod test {
     use rand_core::{OsRng, SeedableRng};
     use sha2::Digest;
     use w3f_bls::{Message, TinyBLS377};
+    use crate::tlock::curves::drand::{
+        TinyBLS381DrandQuicknet as TinyBLS381,
+        UsualBLSDrandMainnet as ZBLS,
+    };
 
     // specific conditions that we want to test/verify
     enum TestStatusReport {
@@ -233,19 +237,8 @@ mod test {
         });
     }
 
-    use ark_ec::{
-        bls12::Bls12,
-        hashing::{curve_maps::wb::WBMap, map_to_curve_hasher::MapToCurveBasedHasher, HashToCurve},
-        models::short_weierstrass,
-        pairing::Pairing,
-    };
-    use ark_bls12_381::{g1, g2, G1Affine, G2Affine};
-    use ark_ff::{field_hashers::DefaultFieldHasher, Zero};
-    // mod crate::drand_bls_381_quicknet;
-    use crate::tlock::drand_bls_381_quicknet::TinyBLS381DrandQuicknet as TinyBLS381;
-
     #[test]
-    pub fn tlock_encrypt_decrypt_drand_works() {
+    pub fn tlock_encrypt_decrypt_drand_quicknet_works() {
         // using a pulse from drand's QuickNet
         // https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/1000
         // the beacon public key
@@ -267,12 +260,6 @@ mod test {
         let plaintext = b"this is a test".as_slice();
         let esk = [2; 32];
 
-        let id: &Vec<u8> = {
-            let mut hasher = sha2::Sha256::new();
-            hasher.update(&round.to_be_bytes());
-            &hasher.finalize().to_vec()
-        };
-
         let sig_bytes = hex::decode(signature).expect("The signature should be well formatted");
         let sig =
             <TinyBLS381 as EngineBLS>::SignatureGroup::deserialize_compressed(&*sig_bytes)
@@ -284,15 +271,64 @@ mod test {
             hasher.finalize().to_vec()
         };
 
-        let pk = w3f_bls::PublicKey::<TinyBLS381>(pub_key);
-
-        // Create message object and verify
-        let msg = Message::new(b"", &message);
-
         let identity = Identity::new(b"", vec![message]);
 
         let rng = ChaCha20Rng::seed_from_u64(0);
         let ct = tle::<TinyBLS381, ChaCha20Rng>(
+            pub_key,
+            esk,
+            plaintext,
+            identity,
+            rng,
+        ).unwrap();
+
+        // then we can decrypt the ciphertext using the signature
+        let result = ct.tld(sig).unwrap();
+        assert!(result.message == plaintext);
+    }
+
+    #[test]
+    pub fn tlock_encrypt_decrypt_drand_mainnet_works() {
+        // using a pulse from drand's QuickNet
+        // https://drand.cloudflare.com/8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce/public/1000
+        // the beacon public key
+        let pk_bytes = b"868f005eb8e6e4ca0a47c8a77ceaa5309a47978a7c71bc5cce96366b5d7a569937c529eeda66c7293784a9402801af31";
+        // a round number that we know a signature for
+        let round: u64 = 1000;
+        // the signature produced in that round
+        let signature =	b"99bf96de133c3d3937293cfca10c8152b18ab2d034ccecf115658db324d2edc00a16a2044cd04a8a38e2a307e5ecff3511315be8d282079faf24098f283e0ed2c199663b334d2e84c55c032fe469b212c5c2087ebb83a5b25155c3283f5b79ac";
+        let previous_signature =	b"af0d93299a363735fe847f5ea241442c65843dc1bd3a7b79646b3b10072e908bf034d35cd69d378e3341f139100cd4cd03030399864ef8803a5a4f5e64fccc20bbae36d1ca22a6ddc43d2630c41105e90598fab11e5c7456df3925d4b577b113";
+
+        // Convert hex string to bytes
+        let pub_key_bytes = hex::decode(pk_bytes).expect("Decoding failed");
+        // Deserialize to G1Affine
+        let pub_key = <ZBLS as EngineBLS>::PublicKeyGroup::deserialize_compressed(
+            &*pub_key_bytes,
+        )
+        .unwrap();
+
+        // then we tlock a message for the pubkey
+        let plaintext = b"this is a test".as_slice();
+        let esk = [2; 32];
+
+        let sig_bytes = hex::decode(signature).expect("The signature should be well formatted");
+        let sig =
+            <ZBLS as EngineBLS>::SignatureGroup::deserialize_compressed(&*sig_bytes)
+                .unwrap();
+
+        let prev_sig_bytes = hex::decode(previous_signature)
+            .expect("The signature should be well formatted");
+        let message = {
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(prev_sig_bytes);
+            hasher.update(round.to_be_bytes());
+            hasher.finalize().to_vec()
+        };
+
+        let identity = Identity::new(b"", vec![message]);
+
+        let rng = ChaCha20Rng::seed_from_u64(0);
+        let ct = tle::<ZBLS, ChaCha20Rng>(
             pub_key,
             esk,
             plaintext,
